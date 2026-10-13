@@ -6,6 +6,7 @@
 - **目标 GCP 项目与数据集**：`<YOUR_PROJECT_ID>.<YOUR_DATASET>`（示例：`bhi_manu`）
 - **BQCA Data Agent 资源**：`projects/<YOUR_PROJECT_ID>/locations/global/dataAgents/bhi-manu-2026-agent`
 - **Knowledge Catalog 术语表**：`projects/<YOUR_PROJECT_ID>/locations/global/glossaries/bhi-manu-2026-glossary`
+- **语言版本 (Language Editions)**：**中文版 (SDD_cn.md)** | [English Edition (SDD_en.md)](./SDD_en.md)
 
 ---
 
@@ -81,7 +82,8 @@ flowchart TB
 
 ```text
 manu-bhi/
-├── SDD_v1.0.md                              # 本软件设计说明书 (已演进至 v1.9)
+├── SDD_cn.md                                # 中文版软件设计说明书 (Current Version: v1.9)
+├── SDD_en.md                                # 英文版软件设计说明书 (English Edition for Global Teams: v1.9)
 ├── skills/
 │   ├── cloudrun-session-domain-auth/
 │   │   └── SKILL.md                         # Cloud Run 无状态长效 Session (7~30天) + 滑动自动续期认证 Skill 规范
