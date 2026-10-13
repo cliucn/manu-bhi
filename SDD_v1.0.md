@@ -1,7 +1,7 @@
-# 软件设计说明书 (SDD v1.0)：2026 行业线收入、RunRate 与三大桶 Quota 达成门户（含 BQCA + Knowledge Catalog 智能分析引擎）
+# 软件设计说明书 (SDD v1.9)：2026 行业线收入、RunRate 与三大桶 Quota 达成门户（含 BQCA + Knowledge Catalog 智能分析引擎 & 无状态长效认证）
 
-- **文档版本**：`v1.0 (Production Release)`
-- **发布日期**：`2026-10-12`
+- **文档版本**：`v1.9 (Production Release)`
+- **更新日期**：`2026-10-13`
 - **适用范围**：`Google Cloud 区域与行业线 (BHI / Manufacturing 等领地可通用复用)`
 - **目标 GCP 项目与数据集**：`<YOUR_PROJECT_ID>.<YOUR_DATASET>`（示例：`bhi_manu`）
 - **BQCA Data Agent 资源**：`projects/<YOUR_PROJECT_ID>/locations/global/dataAgents/bhi-manu-2026-agent`
@@ -14,16 +14,20 @@
 ### 1.1 业务痛点
 在 Google Cloud 区域与行业线的日常经营分析中，销售负责人与 Customer Engineer (CE) 面临以下核心痛点：
 1. **多源口径割裂**：日常消费出账数据位于 `concord-prod.service_cloudbi_reporting.revenue_daily`，而三大考核桶 Quota、去年同期基线（PY Baseline）、账户级负向归零（NIR Floor）以及 Gemini Enterprise (GE) 合同签约（Bookings Net ACV）分散在 `concord-prod.service_cloudbi` 的多张视图中。
-2. **RVP 认账与 Gross 毛消费混淆**：销售考核以含激励折算的 **RVP Revenue** 为准，而技术侧容量规划常看 **Gross Revenue**，混在同一张表中极易误读。
+2. **RVP 认账、Gross 毛消费与 Marketplace 封顶规则复杂**：销售考核以含激励折算的 **RVP Revenue** 为准（其中 3P Marketplace 按 50% 折算），且在 Bucket 1 中受 **25% Marketplace Quota Cap** 限制，在 Bucket 2 中仅计入 **1P 自研产品**（剔除 3P Marketplace AI 订阅），直接裸查明细表极易与 `go/rainmaker` 产生偏差。
 3. **GE 签约水位线（Monthly Watermark）对账困难**：Gemini Enterprise 采用签约净增年化合同额（`NETACV_MONTHLY`）考核，从客户 100% 原始签约额到 `go/rainmaker` 最终认账达成之间涉及续约剔除、`Gen AI FSP` 10% 权重折算以及历史最高水位线冲减三步核算。
-4. **隐私合规要求**：直接查询个人级薪酬快照表会涉及个人敏感薪酬信息（PII / Compensation），需要构建一套**100% 领地级（Territory）与街区级（Street-Level NAL）脱敏汇总架构**，不存储任何个人薪酬字段。
+4. **隐私与组织安全合规要求**：
+   - 直接查询个人级薪酬快照表会涉及个人敏感薪酬信息（PII / Compensation），需要构建一套**100% 领地级（Territory）与街区级（Street-Level NAL）脱敏汇总架构**，不存储任何个人薪酬字段；
+   - 遵循 Argolis 组织安全策略（Domain Restricted Sharing），项目 IAM 严禁直接绑定跨域名个人邮箱账号，需统一由 Cloud Run 绑定的专用 Service Account 代理访问后端资源；
+   - 原生 Google Identity Services (GIS) OIDC `id_token` 固定 1 小时（3600 秒）硬性过期，导致业务人员看看板时每小时频繁掉线重登。
 5. **长尾查询响应慢**：固定报表难以覆盖临时的跨表组合查询（如“高 DA/DB/AI 消费但未签 GE 的空白商机客户”、“近期单日 RunRate 相比上月日均跌幅最大的预警客户”），传统 LLM 裸写 SQL 容易搞错内部考核口径。
 
 ### 1.2 核心设计目标
-- **口径 100% 对齐 `go/plan2100` 与 `go/rainmaker`**：自动完成 Bucket 1 (`GCP iRevenue`)、Bucket 2 (`DA, DB & Cloud AI iRevenue`)、Bucket 3 (`Gemini Enterprise Net ACV`) 的领地级与各 Street-Level NAL 级精确对账。
+- **口径 100% 对齐 `go/plan2100` 与 `go/rainmaker`**：自动完成 Bucket 1 (`GCP iRevenue`)、Bucket 2 (`DA, DB & Cloud AI iRevenue`)、Bucket 3 (`Gemini Enterprise Net ACV`) 的领地级与各 Street-Level NAL 级精确对账（含账户级负向归零、Marketplace 25% Quota Cap、Bucket 2 1P-Only 过滤及对账截止日期显式标注）。
+- **无状态长效 Session（7天有效）+ 滑动自动续期访问控制**：将 Google 1 小时 `id_token` 换发为应用自签名的 7 天无状态 `HS256` `HttpOnly` Session Cookie，剩余有效期低于 50% 时自动滑动续期，支持多组织通配域名（`google.com`, `*.altostrat.com`）与精准用户白名单（`ALLOWED_USERS`），且兼容 Cloud Run Scale-to-Zero。
 - **双层汇总与双层级每日 RunRate 曲线下钻**：同时提供 **NAL 级（第一层，业务组汇总）** 与 **Account 级（第二层，客户明细）** 的汇总表及每日 **单日 RunRate (DRR)** 走势曲线，点击表格第一列即可联动切换曲线。
 - **BQCA + Knowledge Catalog 语义治理长尾分析**：基于 Google Cloud 原生 **BigQuery Conversational Analytics (`geminidataanalytics.googleapis.com/v1beta`)** 与 **Knowledge Catalog (`dataplex.googleapis.com/v1`)**，将 11 张表 / 251 列语义描述、8 项官方业务术语及 6 组黄金验证 SQL 注入受治理的 Data Agent，实现零幻觉、可溯源的 Text-to-SQL 对话分析。
-- **一键复制重现（Replicable by Design）**：其他行业线或区域团队仅需修改项目配置与领地 NAL 范围，即可在 15 分钟内完整克隆部署。
+- **全量变更可审计（Release Notes）与一键复制重现**：内置独立版本更新日志页面（`/releasenotes`），其他行业线或区域团队仅需修改项目配置与领地 NAL 范围，即可在 15 分钟内完整克隆部署。
 
 ---
 
@@ -34,12 +38,12 @@ flowchart TB
     subgraph Source["1. 内部权威数据源层 (concord-prod)"]
         S1["service_cloudbi_reporting.revenue_daily<br/>(每日客户×产品 Gross / RVP 消费明细)"]
         S2["service_cloudbi.book_of_business_nal_view<br/>(当前领地管辖的 Street-Level NAL 列表)"]
-        S3["service_cloudbi.nal_reporting & customer_nir<br/>(季度 Quota、PY 基线、账户级 NIR 归零)"]
+        S3["service_cloudbi.nal_reporting & customer_nir<br/>(季度 Quota、PY 基线、账户级 NIR 归零、Marketplace 封顶)"]
         S4["service_cloudbi.bookings<br/>(Gemini Enterprise & Gen AI FSP 签约订单)"]
     end
 
     subgraph ETL["2. 自动化数据抽取与对账层 (Cloudtop Cron + Python)"]
-        P1["scripts/extract_revenue_pipeline.py<br/>多源抽取 · 三大桶对账 · 水位线校准"]
+        P1["scripts/extract_revenue_pipeline.py<br/>多源抽取 · 三大桶对账 · Marketplace 25% 封顶与水位线校准"]
         P2["scripts/setup_bqca_knowledge_catalog.py<br/>表/列语义注释同步 · Glossary 术语注册 · BQCA Agent 发布"]
         P3["scripts/daily_pipeline.sh<br/>每日定时调度 (使用 Cloud Run 绑定服务账号写入)"]
         P3 --> P1 --> P2
@@ -59,9 +63,9 @@ flowchart TB
     end
 
     subgraph Web["4. 无服务器 Web 门户层 (Cloud Run)"]
-        AUTH["Google Identity Services (OAuth 2.0)<br/>ALLOWED_USERS 授权用户白名单校验"]
+        AUTH["Google GIS OIDC + 7天无状态 HS256 Session Cookie<br/>滑动自动续期 · ALLOWED_DOMAINS + ALLOWED_USERS 双重白名单"]
         API["FastAPI Backend (app/main.py)<br/>绑定服务账号访问 BQ 与 BQCA 网关"]
-        UI["16:9 宽屏前端看板 (app/templates/index.html)<br/>五大视图 · 行列双向固定 · 点击首列联动 DRR 曲线 · 多行长尾查询框"]
+        UI["16:9 宽屏前端看板 (index.html + releasenotes.html)<br/>五大主视图 · 截止日期横幅 · 独立 Release Notes 页面"]
         AUTH --> API <--> UI
     end
 
@@ -77,17 +81,18 @@ flowchart TB
 
 ```text
 manu-bhi/
-├── SDD_v1.0.md                              # 本软件设计说明书 (v1.0)
+├── SDD_v1.0.md                              # 本软件设计说明书 (已演进至 v1.9)
 ├── scripts/
 │   ├── extract_revenue_pipeline.py          # 核心 ETL 管线：从 concord-prod 抽取并构建 11 张分析表（通过服务账号写入）
 │   ├── setup_bqca_knowledge_catalog.py      # 语义治理脚本：通过服务账号同步 Knowledge Catalog 表/列注释、Glossary 与 BQCA Agent
 │   └── daily_pipeline.sh                    # 每日定时刷新脚本（由 crontab 每日自动触发 ETL + 语义同步）
 ├── app/
 │   ├── Dockerfile                           # Cloud Run 容器镜像构建文件 (Python 3.12-slim + uvicorn)
-│   ├── requirements.txt                     # Web 后端 Python 依赖清单
-│   ├── main.py                              # FastAPI 后端服务（含 ALLOWED_USERS 白名单鉴权、服务账号委托授权、报表 API、BQCA 网关）
+│   ├── requirements.txt                     # Web 后端 Python 依赖清单 (含 FastAPI, PyJWT, google-auth, BigQuery)
+│   ├── main.py                              # FastAPI 后端服务（含 7天无状态 Session 鉴权、滑动续期、报表 API、BQCA 网关）
 │   └── templates/
-│       └── index.html                       # 16:9 宽屏单页应用前端（双层 DRR 曲线 + 双向固定表格 + 多行回车换行 BQCA 对话框）
+│       ├── index.html                       # 16:9 宽屏主看板（双层 DRR 曲线 + 双向固定表格 + 对账截止日期横幅 + 多行 BQCA 对话框）
+│       └── releasenotes.html                # 独立版本更新日志页面（记录 v1.0.0 至 v1.9.0 历次版本演进，支持分类筛选与搜索）
 └── logs/
     └── cron.log                             # 每日定时任务执行日志
 ```
@@ -108,7 +113,7 @@ manu-bhi/
 ### 4.2 四大核心产品线在 `revenue_daily` 中的分类规则
 在 `scripts/extract_revenue_pipeline.py` 中，基于 `go/plan2100` 产品层级映射如下：
 1. **GCP 总盘 (`is_gcp_plan2100`)**：
-   - `fph_product_level_1 = 'Google Cloud Platform'`（涵盖 Compute、Storage、Networking、Data Analytics、Databases、Cloud AI、Apigee 等全部计入 GCP 考核的产品）。
+   - `fph_product_level_1 = 'Google Cloud Platform'`（涵盖 Compute、Storage、Networking、Data Analytics、Databases、Cloud AI、Apigee、Cloud Marketplace 等全部计入 GCP 考核的产品）。
 2. **Cloud AI (`is_cloud_ai_plan2100`)**：
    - `fph_product_level_2 IN ('Vertex AI', 'Cloud AI')` 或 `gtm_product_level_5 IN ('Build with AI', 'Customer Engagement', 'Developer AI Assistance')`。
 3. **DA 数据分析 (`da_*`)**：
@@ -116,16 +121,21 @@ manu-bhi/
 4. **DB 数据库 (`db_*`)**：
    - `fph_product_level_2 = 'Databases'` 或 `gtm_product_level_5 = 'Migrate and Modernize Databases'`（对应 Spanner、AlloyDB、Cloud SQL、Bigtable、Memorystore、Firestore 等）。
 
-### 4.3 三大考核桶 (Three Quota Buckets) 对账算法
+### 4.3 三大考核桶 (Three Quota Buckets) 与 Marketplace 限制对账算法
 1. **Bucket 1: GCP iRevenue (增量收入)**
    - **产品范围 (`service_cloudbi.nal_reporting`)**：`product IN ('GCP_CLASSIC_FIELD', 'INFRA_AI', 'AI_SOLUTIONS', 'DEVELOPER_AI_ASSISTANCE', 'APIGEE')`。
    - **核心计算公式**：
      $$\text{Incremental Quota} = \text{Gross Quota} - \text{PY Baseline}$$
      $$\text{Attainment \%} = \frac{\text{YTD Incremental Actuals}}{\text{Incremental Quota}} \times 100\%$$
    - **账户级负向归零规则 (`ApplyAccountNegativeAttainmentToNetZeroRule`)**：从 `service_cloudbi.customer_nir` 按单客户汇总年度净增 `b1_nir`，若单客户同比萎缩（`b1_nir < 0`），按 `GREATEST(b1_nir, 0)` 归零，不倒扣同 NAL 下其他正向增长客户的业绩。
+   - **Cloud Marketplace 三重考核限制规则 (`go/plan2100`)**：
+     1. **50% RVP 折算系数 (`0.5x`)**：客户通过 Cloud Marketplace 采购第三方（3P）SaaS 或模型订阅时，`rvp_revenue` 默认按 Gross 账单金额的 **50%** 折算计入净消费；
+     2. **Bucket 1 的 25% Marketplace Quota Cap**：同一 NAL 下所有 3P Marketplace 产生的净增量收入（Marketplace NIR）计入 Bucket 1 实绩的上限为该 NAL **Bucket 1 年度增量 Quota 的 25%**，超出部分在 `go/rainmaker` 最终认账时自动截断：
+        $$\text{Recognized Marketplace NIR} = \min\left(\text{Raw Marketplace NIR},\; 0.25 \times \text{Bucket 1 Incremental Quota}\right)$$
+     3. **单账户 iRevenue 封顶规则（Account Cap）**：在 Core FSR/CE Plan 中，单账户对同一考核桶的净增贡献上限为该桶年度增量 Quota 的 `200%`（最低保底封顶线为 `$2.5M`，即 $\max(2.0 \times \text{Quota}, \$2.5\text{M})$）；而在 Select / Enterprise Plan 中不设单账户 200% 封顶，但仍严格执行上述 25% Marketplace Quota Cap。
 2. **Bucket 2: DA, DB & Cloud AI iRevenue (数据与 AI 增量收入)**
    - **产品范围 (`service_cloudbi.nal_reporting`)**：`product IN ('ANALYTICS', 'LOOKER', 'MIGRATE_AND_MODERNIZE_DATABASES', 'AI_SOLUTIONS', 'DEVELOPER_AI_ASSISTANCE')`。
-   - **核心计算公式**：汇总上述 5 个考核子产品线的去年同期基线、2026 增量 Quota 与经账户级负向归零校准后的 YTD 增量达成实绩。
+   - **1P 自研产品限定规则（剔除 3P Marketplace）**：虽然 `customer_nir` 中部分第三方 Marketplace 模型订阅会被打上 `gtm_product_level_5 = 'Build with AI'` 标签，但根据 `go/plan2100` 规范，Bucket 2 仅统计 Google **1P 原生数据与 AI 产品**（`fph_product_level_2 IN ('Vertex AI', 'Cloud AI', 'Data Analytics', 'Looker', 'Databases')`），所有 `fph_product_level_2 = 'Cloud Marketplace'` 的 3P 消费均不计入 Bucket 2 达成。
 3. **Bucket 3: Gemini Enterprise Net ACV (签约净增年化合同额)**
    - **数据源**：`concord-prod.service_cloudbi.bookings`（**不加 T-2 延迟过滤**，实时同步截至当日的最新已签合同）与 `nal_reporting` (`product = 'AGENTSPACE'`)。
    - **三步对账桥梁（Three-Step Reconciliation Bridge）**：
@@ -204,33 +214,72 @@ sequenceDiagram
 
 ---
 
-## 7. Web 门户后端 API 与前端交互设计
+## 7. 无状态长效 Session 认证架构、后端 API 与前端交互设计
 
-### 7.1 后端 API 路由契约 (`app/main.py`)
-所有 `/api/*` 接口均受 `Depends(require_user)` 保护（校验 `Authorization: Bearer <Google_ID_Token>` 并严格验证登录邮箱属于环境变量 `ALLOWED_USERS` 指定的授权用户白名单）：
+### 7.1 无状态长效 Session（7天有效）+ 滑动自动续期方案 (`cloudrun-session-domain-auth`)
+为彻底解决 Google Identity Services (GIS) OIDC `id_token` 固定 1 小时（3600 秒）过期导致频繁掉线的问题，同时无需额外部署 ALB 负载均衡器或 Redis，本系统在 `app/main.py` 中实现了无状态长效会话管理：
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as 浏览器用户
+    participant GIS as Google Identity Services
+    participant App as Cloud Run (FastAPI)
+
+    User->>App: 1. 访问 GET / 或 /releasenotes
+    App-->>User: 返回 HTML (含 COOP: same-origin-allow-popups)
+    User->>App: 2. 前端调用 GET /api/whoami (credentials: same-origin)
+    alt 首次访问或 Cookie 已过期
+        App-->>User: 401 Unauthorized
+        User->>GIS: 3. 弹出登录遮罩层 (ux_mode: popup) 完成 Google 登录
+        GIS-->>User: 返回 1 小时有效的 Google OIDC id_token
+        User->>App: 4. POST /api/auth/session { credential: id_token }
+        App->>App: 校验 Google 签名 + ALLOWED_DOMAINS + ALLOWED_USERS 白名单
+        App-->>User: 200 OK + Set-Cookie: argolis_app_session (HS256, 7天, HttpOnly, Secure, SameSite=Lax)
+    else Cookie 在 7 天有效期内
+        App->>App: 校验 HS256 签名与白名单 + 检查剩余有效期是否 < 50% (3.5天)
+        opt 剩余有效期 < 50% (触发滑动续期)
+            App-->>User: 自动重签下发全新 7 天 Set-Cookie + 响应头 x-session-renewed: true
+        end
+        App-->>User: 200 OK { user, remaining_seconds, sliding_renewed }
+    end
+```
+
+- **核心工程防踩坑设计**：
+  1. **自定义分号 Cookie 解析器 (`extract_cookie_token`)**：GIS SDK 会在同域下写入包含花括号与双引号的 `g_state={"i_l":0}` Cookie，会导致 Python 标准库 `http.cookies.SimpleCookie`（进而影响 `request.cookies`）解析中断并丢失其后的 Session Cookie；后端直接按 `;` 拆分原始 `Cookie` 请求头安全提取 `argolis_app_session`。
+  2. **COOP 响应头与 Popup 模式**：所有页面响应头显式设置 `cross-origin-opener-policy: same-origin-allow-popups`，前端 GIS 初始化固定采用 `ux_mode: 'popup'` 并配合 `setTimeout(..., 80)` 渲染按钮，避免 Google 弹窗 `postMessage` 被浏览器拦截。
+  3. **Scale-to-Zero 与多实例无状态兼容**：所有会话声明（`sub`, `email`, `name`, `iat`, `exp`, `type`）经环境变量 `SESSION_SECRET` 进行 `HMAC-SHA256` 签名存储在客户端 `HttpOnly` Cookie 中，容器缩容至 0 或多实例水平扩容均不会丢失登录状态。
+
+### 7.2 后端 API 路由契约 (`app/main.py`)
+所有 `/api/*` 业务接口均受 `Depends(require_session)` 保护（支持 `HttpOnly` 长效 Session Cookie、网关头及 Bearer Token，并实时复核 `ALLOWED_DOMAINS` 与 `ALLOWED_USERS` 白名单）：
 
 | HTTP 方法与路径 | 功能说明 | 核心底层表 / 服务 |
 | :--- | :--- | :--- |
-| `GET /authconfig` | 返回前端 Google Identity Services 登录所需的 `client_id` 与 `allowed_domains` | 环境变量配置 |
-| `GET /api/overview` | 返回全领地 KPI 卡片汇总、NAL 计分卡、月度 MRR 走势、GE 签约汇总与月度趋势 | `customer_revenue_scorecard_2026`, `nal_revenue_scorecard_2026`, `customer_monthly_revenue`, `nal_ge_bookings_2026` |
-| `GET /api/scorecard` | 返回全部客户级计分卡明细列表 | `customer_revenue_scorecard_2026` |
-| `GET /api/nal-trend?nal_name=...` | 返回指定 NAL（或全领地 `ALL`）2026 每日单日 RunRate (DRR) 序列（GCP/AI/DA/DB 双口径） | `customer_daily_runrate` (按 `nal_name, usage_date` 聚合) |
+| `GET /` | 返回主看板 HTML 页面（带 `COOP: same-origin-allow-popups` 响应头） | `app/templates/index.html` |
+| `GET /releasenotes` | 返回独立版本更新日志 HTML 页面（记录 `v1.0.0` → `v1.9.0` 完整变更） | `app/templates/releasenotes.html` |
+| `GET /authconfig` | 返回前端 GIS 登录所需的 `client_id`、`allowed_domains` 与 `session_ttl_seconds` | 环境变量配置 |
+| `POST /api/auth/session` | 验证前端提交的 1 小时 Google `id_token`，签发 7 天 `HttpOnly` Session Cookie | `google.oauth2.id_token` + `PyJWT` |
+| `GET /api/whoami` | 校验当前长效 Session 状态（若剩余有效期 `< 50%` 自动滑动续期） | `require_session` |
+| `POST /api/auth/logout` | 清除 `argolis_app_session` Cookie 并退出登录 | Cookie 销毁 |
+| `GET /api/dashboard-data` | 返回全领地三大考核桶汇总、KPI 卡片、NAL 计分卡、月度趋势与客户明细 | `bhi_manu` 核心分析表 |
+| `GET /api/nal-trend?nal_name=...` | 返回指定 NAL（或全领地 `ALL`）2026 每日单日 RunRate (DRR) 序列（GCP/AI/DA/DB 双口径） | `customer_daily_runrate` |
 | `GET /api/customer-trend?reporting_id=...` | 返回指定客户 2026 每日单日 RunRate (DRR) 序列与 7 日移动平均线 | `customer_daily_runrate` |
-| `GET /api/ge-details` | 返回客户级 Gemini Enterprise 签约订单与 SKU 明细 | `customer_ge_bookings_2026` |
-| `GET /api/quota-attainment` | 返回各 NAL 三大考核桶 Quota 与实绩对比、领地级汇总及分季度明细 | `nal_three_buckets_quota_2026`, `territory_quarterly_quota_2026` |
 | `GET /api/agent/catalog` | 返回当前绑定的 BQCA Data Agent 与 Knowledge Catalog 治理资产元数据 | `geminidataanalytics` & `dataplex` 配置 |
 | `POST /api/agent/chat` | 调用 BQCA `:chat` 接口，返回语义推理步骤 (`thoughts`)、Markdown 回答 (`answer`)、执行的 SQL 与结果 (`sql_queries`) 及推荐追问 (`followup_questions`) | `geminidataanalytics.googleapis.com/v1beta` |
 
-### 7.2 前端 16:9 宽屏与交互亮点 (`app/templates/index.html`)
+### 7.3 前端 16:9 宽屏与交互亮点 (`app/templates/index.html` & `releasenotes.html`)
 1. **16:9 宽屏自适应布局**：主容器采用 `max-width: 98vw`，充分利用宽屏显示器展示多桶多指标宽表。
 2. **表头与首列双向固定（Sticky Row Header + Sticky First Column）**：
    - 表头行 `thead th` 固定于顶部（`position: sticky; top: 0; z-index: 20`）；
    - 第一列（NAL 名称或客户名称）固定于左侧（`position: sticky; left: 0; z-index: 10`，表头左上角交叉格 `z-index: 30`），横向或纵向滚动时始终保持行列对齐。
 3. **点击第一列直接联动 DRR 曲线（NAL 级 + Account 级双层曲线）**：
-   - 无需在表格末尾寻找操作按钮，直接点击任意表格**第一列（NAL 名称或客户名称）**，页面自动平滑滚动至对应的 **NAL 级别 DRR 曲线图** 或 **Account 级别 DRR 曲线图** 并加载每日走势。
-4. **AI 数据分析 Agent 多行编辑框（按回车在框内换行，点击按钮显式发送）**：
-   - `BQCA + Knowledge Catalog` 查询输入框（`#agentInput`）采用多行可伸缩 `<textarea rows="3">`，按回车键（`Enter`）在编辑框内正常换行以便编写多行复杂长尾查询条件，不会误触发提交；仅在点击右侧 **「发送查询 🚀」** 按钮时才提交查询，且用户消息气泡完整保留多行换行格式（`white-space: pre-wrap`）。
-5. **行业辨识度 Tab 图标**：内嵌高辨识度蓝色工厂 SVG Favicon（`🏭`），在 Chrome 多标签页中一目了然。
+   - 直接点击任意表格**第一列（NAL 名称或客户名称）**，页面自动平滑滚动至对应的 **NAL 级别 DRR 曲线图** 或 **Account 级别 DRR 曲线图** 并加载每日走势。
+4. **Quota 完成页面对账截止日期横幅（As-of Date Banner）**：
+   - 在 Tab 4（三大桶 Quota 完成率）顶部醒目展示当前数据更新截止日期（区分消费类指标 `T-2` 最新完整出账日与签约类指标实时同步），方便业务人员与 `go/rainmaker` 按同一时间截面比对。
+5. **AI 数据分析 Agent 多行编辑框**：
+   - `BQCA + Knowledge Catalog` 查询输入框（`#agentInput`）采用多行 `<textarea rows="3">`，按 `Enter` 键在框内正常换行，支持 `Ctrl/Cmd + Enter` 或点击 **「发送查询 🚀」** 按钮提交查询。
+6. **独立版本更新日志页面（`/releasenotes`）**：
+   - 主看板顶部导航栏右侧内置 **📋 版本更新日志 (Release Notes)** 链接与 **🔒 7天长效免登** 状态徽标，点击可查看从 `v1.0.0` 到 `v1.9.0` 的全部功能迭代与对账校准历史，支持按分类筛选与关键词实时检索。
 
 ---
 
@@ -282,7 +331,7 @@ done
 ```bash
 cd /path/to/manu-bhi
 python3 -m venv .venv
-.venv/bin/pip install google-cloud-bigquery pandas pyarrow db-dtypes requests google-auth
+.venv/bin/pip install google-cloud-bigquery pandas pyarrow db-dtypes requests google-auth PyJWT
 
 # 修改 scripts/extract_revenue_pipeline.py 顶部的目标项目、数据集及领地 NAL 过滤条件后执行：
 .venv/bin/python scripts/extract_revenue_pipeline.py
@@ -295,17 +344,20 @@ python3 -m venv .venv
 .venv/bin/python scripts/setup_bqca_knowledge_catalog.py
 ```
 
-### Step 4：一键构建并部署至 Cloud Run（绑定服务账号与登录用户白名单）
-注意 `Dockerfile` 位于 `app/` 目录下，部署时指定 `--service-account="${SA_EMAIL}"` 及 `ALLOWED_USERS` 授权用户白名单：
+### Step 4：一键构建并部署至 Cloud Run（绑定服务账号、7天无状态 Session 密钥与登录白名单）
+注意 `Dockerfile` 位于 `app/` 目录下，部署时指定 `--service-account="${SA_EMAIL}"`、`SESSION_SECRET`、`SESSION_TTL_SECONDS=604800`、`ALLOWED_DOMAINS` 及 `ALLOWED_USERS`：
 
 ```bash
+export SESSION_SECRET="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+export OAUTH_CLIENT_ID="<YOUR_OAUTH_WEB_CLIENT_ID>.apps.googleusercontent.com"
+
 gcloud run deploy bhi-manu-revenue-portal \
   --source app \
   --region us-central1 \
   --project "${PROJECT_ID}" \
   --service-account "${SA_EMAIL}" \
   --allow-unauthenticated \
-  --set-env-vars="^:^GOOGLE_CLOUD_PROJECT=${PROJECT_ID}:BQ_DATASET=bhi_manu:BQCA_AGENT_ID=bhi-manu-2026-agent:ALLOWED_DOMAINS=google.com:ALLOWED_USERS=user1@google.com,user2@google.com" \
+  --set-env-vars="^|^APP_AUTH=1|GOOGLE_CLOUD_PROJECT=${PROJECT_ID}|BQ_DATASET=bhi_manu|BQCA_AGENT_ID=bhi-manu-2026-agent|OAUTH_CLIENT_ID=${OAUTH_CLIENT_ID}|SESSION_SECRET=${SESSION_SECRET}|SESSION_TTL_SECONDS=604800|ALLOWED_DOMAINS=google.com,*.altostrat.com|ALLOWED_USERS=user1@google.com,user2@google.com" \
   --quiet
 ```
 
@@ -320,12 +372,15 @@ gcloud run deploy bhi-manu-revenue-portal \
 
 ## 9. 验收与对账核验清单 (Verification Checklist)
 
-部署完成后，请通过以下 5 项标准步骤验证系统数据口径、权限合规性与交互功能是否 100% 正常：
+部署完成后，请通过以下 6 项标准步骤验证系统数据口径、长效认证、权限合规性与交互功能是否 100% 正常：
 1. **三大考核桶 Quota 与实绩对账核验**：
-   - **Bucket 1 (`GCP iRevenue`) & Bucket 2 (`DA, DB & Cloud AI iRevenue`)**：核对顶栏 Banner 与 Tab 4 中各 NAL 的 `Incremental Quota` 及 `Actuals` 是否与 `go/rainmaker` 面板完全一致（确认账户级负向归零规则 `GREATEST(nir, 0)` 已生效）。
+   - **Bucket 1 (`GCP iRevenue`) & Bucket 2 (`DA, DB & Cloud AI iRevenue`)**：核对顶栏 Banner 与 Tab 4 中各 NAL 的 `Incremental Quota` 及 `Actuals` 是否与 `go/rainmaker` 面板完全一致（确认账户级负向归零规则 `GREATEST(nir, 0)`、Bucket 1 的 25% Marketplace Quota Cap 以及 Bucket 2 的 1P-Only 过滤规则均已生效）。
    - **Bucket 3 (`Gemini Enterprise Net ACV`)**：核对 Tab 3 顶部的三步对账桥（`100% 原始签约总额` → `剔除续约 & FSP 10% 折算后净增` → `扣除月度历史水位线后最终认账达成`），确认最终认账额与 `go/rainmaker` 100% 吻合。
-2. **Argolis IAM 合规性核验**：
+2. **7天无状态长效 Session 与滑动自动续期核验**：
+   - 核验 `/` 与 `/releasenotes` 响应头包含 `cross-origin-opener-policy: same-origin-allow-popups`；
+   - 核验登录后签发 `argolis_app_session` (`HttpOnly; Secure; SameSite=Lax; Max-Age=604800`)，超过 1 小时无需重登，且当剩余有效期 `< 50%` 时访问 `/api/whoami` 返回 `x-session-renewed: true` 并自动刷新 7 天有效期。
+3. **Argolis IAM 合规性核验**：
    - 运行 `gcloud projects get-iam-policy <YOUR_PROJECT_ID>`，确认不存在任何跨域名个人用户（`user:*@google.com`）绑定，所有 BigQuery 与 BQCA 访问均由 Cloud Run 绑定的服务账号完成。
-3. **双层表格与双层 DRR 曲线联动**：点击任意表格第一列的 NAL 名称或客户名称，上方 NAL 级或客户级 DRR 走势图立刻平滑切换。
-4. **16:9 宽屏与双向固定表头/首列**：上下滚动时表头固定，左右滚动时第一列固定。
-5. **BQCA + Knowledge Catalog 对话验证**：在 Tab 5 多行输入框中按回车测试换行、点击「发送查询 🚀」提交问题，确认能正常展开 **🧠 BQCA + Knowledge Catalog 语义推理链路**、**🗄️ 生成的 BigQuery SQL (含 Job ID 与 CSV 导出)** 以及 **💡 智能推荐追问**。
+4. **双层表格与双层 DRR 曲线联动**：点击任意表格第一列的 NAL 名称或客户名称，上方 NAL 级或客户级 DRR 走势图立刻平滑切换。
+5. **独立版本更新日志页面（`/releasenotes`）**：点击顶栏「📋 版本更新日志 (Release Notes)」，确认可按分类筛选与关键词搜索历次版本变更记录。
+6. **BQCA + Knowledge Catalog 对话验证**：在 Tab 5 多行输入框中按回车测试换行、点击「发送查询 🚀」提交问题，确认能正常展开 **🧠 BQCA + Knowledge Catalog 语义推理链路**、**🗄️ 生成的 BigQuery SQL (含 Job ID 与 CSV 导出)** 以及 **💡 智能推荐追问**。
