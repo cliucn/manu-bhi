@@ -82,6 +82,10 @@ flowchart TB
 ```text
 manu-bhi/
 ├── SDD_v1.0.md                              # 本软件设计说明书 (已演进至 v1.9)
+├── skills/
+│   ├── cloudrun-session-domain-auth/
+│   │   └── SKILL.md                         # Cloud Run 无状态长效 Session (7~30天) + 滑动自动续期认证 Skill 规范
+│   └── cloudrun-session-domain-auth.zip     # 独立打包的 Skill 压缩包（可直接解压至 ~/.gemini/config/skills/ 复用）
 ├── scripts/
 │   ├── extract_revenue_pipeline.py          # 核心 ETL 管线：从 concord-prod 抽取并构建 11 张分析表（通过服务账号写入）
 │   ├── setup_bqca_knowledge_catalog.py      # 语义治理脚本：通过服务账号同步 Knowledge Catalog 表/列注释、Glossary 与 BQCA Agent
