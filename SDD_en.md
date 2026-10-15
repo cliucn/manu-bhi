@@ -1,7 +1,7 @@
-# Software Design Document (SDD v1.9): 2026 Industry Revenue, RunRate & Three-Bucket Quota Portal (with BQCA + Knowledge Catalog Semantic Engine & Stateless Long-Lived Session Auth)
+# Software Design Document (SDD v1.12): 2026 Industry Revenue, RunRate & Three-Bucket Quota Portal (with BQCA + Knowledge Catalog Semantic Engine, GCP Project-Level MRR/DRR Curves, Stateless Long-Lived Session Auth & 4-Tier Caching Architecture)
 
-- **Document Version**: `v1.9 (Production Release)`
-- **Last Updated**: `2026-10-13`
+- **Document Version**: `v1.12 (Production Release)`
+- **Last Updated**: `2026-10-15`
 - **Target Audience**: `Google Cloud Regional & Industry Verticals (BHI / Manufacturing / Retail / FSI / Auto / Gaming — Replicable Across Any Territory)`
 - **Target GCP Project & Dataset**: `<YOUR_PROJECT_ID>.<YOUR_DATASET>` (e.g., `bhi_manu`)
 - **BQCA Data Agent Resource**: `projects/<YOUR_PROJECT_ID>/locations/global/dataAgents/bhi-manu-2026-agent`
@@ -14,21 +14,22 @@
 
 ### 1.1 Business Challenges
 In daily operations across Google Cloud regional and industry verticals, sales leaders, Field Sales Representatives (FSRs), and Customer Engineers (CEs) face five recurring pain points:
-1. **Fragmented Data Sources & Metrics**: Daily cloud consumption resides in `concord-prod.service_cloudbi_reporting.revenue_daily`, whereas Three-Bucket Quota targets, Prior-Year (PY) Baselines, Account-Level Negative Attainment Floors (NIR Floor), and Gemini Enterprise (GE) Bookings (`NETACV_MONTHLY`) are scattered across multiple views in `concord-prod.service_cloudbi`.
+1. **Fragmented Data Sources & Metrics**: Daily cloud consumption resides in `concord-prod.service_cloudbi_reporting.revenue_daily` and project-level `revenue_project_sku_daily`, whereas Three-Bucket Quota targets, Prior-Year (PY) Baselines, Account-Level Negative Attainment Floors (NIR Floor), and Gemini Enterprise (GE) Bookings (`NETACV_MONTHLY`) are scattered across multiple views in `concord-prod.service_cloudbi`.
 2. **Complex RVP vs. Gross Revenue & Cloud Marketplace Cap Rules**: Sales attainment is measured on **RVP Revenue** (net of commercial incentives/credits, where 3P Marketplace spend carries a `0.5x` / 50% multiplier). Furthermore, Bucket 1 (`GCP iRevenue`) enforces a **25% Marketplace Quota Cap**, while Bucket 2 (`DA, DB & Cloud AI iRevenue`) counts **1P native products only** (excluding 3P Marketplace AI subscriptions). Naive SQL queries against raw tables frequently diverge from `go/rainmaker`.
 3. **Opaque Gemini Enterprise Watermark Reconciliation**: Gemini Enterprise is measured on Monthly Net Incremental ACV (`NETACV_MONTHLY`). Reconciling raw 100% signed contract value to the final `go/rainmaker` recognized attainment requires a three-step bridge: excluding renewals, applying the `10%` weight to `Gen AI FSP` contracts, and deducting historical monthly watermarks and de-bookings.
 4. **Strict Privacy & Organizational Security Compliance**:
    - Querying individual compensation snapshots exposes sensitive PII/Compensation data; the architecture must operate on a **100% Territory- and Street-Level NAL (Named Account List) aggregated model** with zero personal compensation fields stored.
    - Under Argolis organizational security policies (**Domain Restricted Sharing**), cross-domain personal user accounts (`user:*@google.com`) cannot be granted direct IAM bindings on the target project; all backend resource access must be delegated through a dedicated Cloud Run Service Account.
    - Native Google Identity Services (GIS) OIDC `id_token`s have a hard-coded **1-hour (`3600s`)** expiration, causing users to be logged out every hour when viewing dashboards.
-5. **Slow Turnaround on Long-Tail Ad-Hoc Queries**: Static dashboards cannot answer ad-hoc cross-table questions (e.g., *"Which accounts have high DA/DB/AI consumption but zero Gemini Enterprise bookings?"* or *"Which accounts experienced the sharpest Daily RunRate drop compared to last month's average?"*). Ungoverned LLMs writing raw SQL frequently hallucinate internal quota rules.
+5. **Slow Turnaround on Long-Tail & GCP Project-Level Curve Queries**: Static dashboards cannot answer ad-hoc cross-table questions or drill down into a specific **GCP Project ID (`project_id`)**'s monthly MRR and daily DRR curves (e.g., inspecting `vivocloudai`, `oppo-gcp-prod-159055`, or `ai-mify-pt-1`). Ungoverned LLMs writing raw SQL frequently hallucinate internal quota rules and lack automatic time-series curve visualization.
 
 ### 1.2 Core Design Objectives
 - **100% Metric Alignment with `go/plan2100` & `go/rainmaker`**: Automatically reconcile Territory and Street-Level NAL performance across Bucket 1 (`GCP iRevenue`), Bucket 2 (`DA, DB & Cloud AI iRevenue`), and Bucket 3 (`Gemini Enterprise Net ACV`), incorporating Account-Level Zero-Floor rules, the 25% Marketplace Quota Cap, Bucket 2 1P-Only filtering, and an explicit As-of Date reconciliation banner.
-- **Stateless 7-Day Session + Sliding Expiration Authentication**: Exchange the 1-hour Google OIDC `id_token` for an application-signed **7-day (`604800s`) stateless `HS256` `HttpOnly` Session Cookie** (`argolis_app_session`). Automatically renew the cookie when remaining TTL drops below 50% (3.5 days), enforce multi-domain (`google.com`, `*.altostrat.com`) and explicit user (`ALLOWED_USERS`) allowlists, and remain 100% compatible with Cloud Run Scale-to-Zero without Redis or external databases.
-- **Two-Tier Aggregation & Interactive Daily RunRate (DRR) Drill-Down**: Provide both **NAL-level (Tier 1)** and **Account-level (Tier 2)** scorecards paired with interactive daily **DRR** time-series charts; clicking any row's first column smoothly scrolls to and updates the corresponding DRR curve.
-- **Governed Long-Tail Analytics via BQCA + Knowledge Catalog**: Leverage native **BigQuery Conversational Analytics (`geminidataanalytics.googleapis.com/v1beta`)** and **Knowledge Catalog (`dataplex.googleapis.com/v1`)** to inject 11 tables / 251 column descriptions, 8 governed business glossary terms, and 6 verified golden SQL examples into a governed Data Agent for hallucination-free, auditable Text-to-SQL conversations.
-- **Full Auditability (Release Notes) & 15-Minute Replicability**: Include a standalone Release Notes & Audit Changelog page (`/releasenotes`) and modular ETL/governance scripts so any global regional or vertical team can clone and deploy the entire stack in 15 minutes.
+- **Stateless 7-Day Session + Sliding Expiration Authentication + Zero Pre-Login Information Exposure**: Exchange the 1-hour Google OIDC `id_token` for an application-signed **7-day (`604800s`) stateless `HS256` `HttpOnly` Session Cookie** (`argolis_app_session`). Automatically renew the cookie when remaining TTL drops below 50% (3.5 days), and enforce **Zero Pre-Login Information Exposure** by serving only a clean 3.4 KB login gate shell before authentication (exposing zero business DOM, metric names, or allowlisted user emails).
+- **Four-Tier Frontend & Backend Caching Architecture (0ms Instant Refresh + 5-Step Progress Bar)**: Combine a browser `localStorage` snapshot cache (L1, 6-hour TTL + background Stale-While-Revalidate version check), `sessionStorage` DRR trend curve cache (L2, `0ms` chart redraw on RVP/Gross tab switch), backend concurrent query execution with 1-hour in-memory caching (L3), and a top-bar one-click Force Refresh button (L4) to eliminate redundant BigQuery queries on page refresh (`F5`). On initial cold load, display an interactive 5-step calculation progress bar instead of `$0` placeholders.
+- **Three-Tier Aggregation & Interactive Daily RunRate (DRR) Drill-Down (NAL + Account + GCP Project ID)**: Provide **NAL-level (Tier 1)**, **Account-level (Tier 2)**, and **GCP Project ID-level (Tier 3)** monthly MRR and daily **DRR** time-series curves.
+- **Governed Long-Tail Analytics via BQCA + Knowledge Catalog + Inline Auto-Curve Rendering**: Leverage native **BigQuery Conversational Analytics (`geminidataanalytics.googleapis.com/v1beta`)** and **Knowledge Catalog (`dataplex.googleapis.com/v1`)** to inject 14 tables / 374 column descriptions, 9 governed business glossary terms, and 9 verified golden SQL examples into a governed Data Agent, paired with automatic **inline Chart.js time-series curve rendering** inside AI chat bubbles.
+- **Full Auditability (Release Notes) & 15-Minute Replicability**: Include a standalone Release Notes & Audit Changelog page (`/releasenotes`, documenting `v1.0.0` through `v1.12.0`) and modular ETL/governance scripts so any global regional or vertical team can clone and deploy the entire stack in 15 minutes.
 
 ---
 
@@ -52,9 +53,9 @@ flowchart TB
 
     subgraph DW["3. Target Analytics Warehouse & Semantic Governance Layer (Zero Personal IAM Bindings)"]
         SA["Cloud Run Bound Service Account<br/>(Delegated Access to All Project Resources)"]
-        BQ[("BigQuery Dataset: bhi_manu<br/>11 Core Analytical Tables · 251 Governed Columns")]
-        KC["Knowledge Catalog (Dataplex Universal Catalog)<br/>Glossary: bhi-manu-2026-glossary (8 Official Terms)"]
-        CA["BQCA Data Agent (geminidataanalytics v1beta)<br/>bhi-manu-2026-agent (6 Verified Golden SQL Queries)"]
+        BQ[("BigQuery Dataset: bhi_manu<br/>14 Core Analytical Tables · 374 Governed Columns")]
+        KC["Knowledge Catalog (Dataplex Universal Catalog)<br/>Glossary: bhi-manu-2026-glossary (9 Official Terms)"]
+        CA["BQCA Data Agent (geminidataanalytics v1beta)<br/>bhi-manu-2026-agent (9 Verified Golden SQL Queries)"]
         SA --> BQ
         SA --> KC
         SA --> CA
@@ -82,8 +83,8 @@ flowchart TB
 
 ```text
 manu-bhi/
-├── SDD_cn.md                                # Software Design Document — Chinese Edition (v1.9)
-├── SDD_en.md                                # Software Design Document — English Edition (v1.9)
+├── SDD_cn.md                                # Software Design Document — Chinese Edition (v1.11)
+├── SDD_en.md                                # Software Design Document — English Edition (v1.11)
 ├── skills/
 │   ├── cloudrun-session-domain-auth/
 │   │   └── SKILL.md                         # Reusable Skill Spec: Cloud Run 7-30 Day Stateless Session + Sliding Renewal Auth
@@ -95,10 +96,10 @@ manu-bhi/
 ├── app/
 │   ├── Dockerfile                           # Cloud Run container image definition (Python 3.12-slim + uvicorn)
 │   ├── requirements.txt                     # Backend Python dependencies (FastAPI, PyJWT, google-auth, BigQuery)
-│   ├── main.py                              # FastAPI backend (7-day stateless session auth, sliding renewal, reporting APIs, BQCA gateway)
+│   ├── main.py                              # FastAPI backend (7-day stateless session auth, 4-tier cache APIs, concurrent BQ queries, BQCA gateway)
 │   └── templates/
-│       ├── index.html                       # 16:9 widescreen SPA dashboard (2-tier DRR curves, sticky headers/columns, multi-line BQCA chat)
-│       └── releasenotes.html                # Standalone Release Notes & Audit Changelog page (v1.0.0 -> v1.9.0 with filtering & search)
+│       ├── index.html                       # 16:9 widescreen SPA dashboard (localStorage 0ms instant cache, 5-step progress bar, 2-tier DRR curves, BQCA chat)
+│       └── releasenotes.html                # Standalone Release Notes & Audit Changelog page (v1.0.0 -> v1.11.0 with filtering & search)
 └── logs/
     └── cron.log                             # Daily cron execution log
 ```
@@ -142,6 +143,7 @@ In `scripts/extract_revenue_pipeline.py`, product hierarchies follow `go/plan210
 2. **Bucket 2: DA, DB & Cloud AI iRevenue (Data & AI Incremental Revenue)**
    - **Product Scope (`service_cloudbi.nal_reporting`)**: `product IN ('ANALYTICS', 'LOOKER', 'MIGRATE_AND_MODERNIZE_DATABASES', 'AI_SOLUTIONS', 'DEVELOPER_AI_ASSISTANCE')`.
    - **1P Native Product Eligibility Rule (Excludes 3P Marketplace)**: Even though certain 3P Marketplace model subscriptions may carry the tag `gtm_product_level_5 = 'Build with AI'` in `customer_nir`, `go/plan2100` restricts Bucket 2 attainment strictly to **Google 1P native Data & AI products** (`fph_product_level_2 IN ('Vertex AI', 'Cloud AI', 'Data Analytics', 'Looker', 'Databases')`). All `fph_product_level_2 = 'Cloud Marketplace'` spend is excluded from Bucket 2.
+   - **Sub-Pod Lock-Before-Allocate Rule**: When allocating aggregated Sub-Pod actuals (e.g., Sub-Pod 1 / Sub-Pod 2) down to Street-Level NALs, any NAL subject to a 25% Marketplace Quota Cap or verified 1P-only calibration must be **locked and subtracted from the Sub-Pod total first**, and the remaining 1P actuals are then distributed across the other NALs in that Sub-Pod using `customer_nir` 1P weights (preventing 3P Marketplace weights from absorbing and discarding legitimate 1P actuals belonging to peer NALs). Q4 territory quota updates are also synchronized (e.g., Manu Cluster total Bucket 1 iRev Quota `$78,952,908.00` / Actuals `$73,719,191.25 = 93.37%`; Bucket 2 iRev Quota `$51,653,090.00` / Actuals `$41,668,607.68 = 80.67%`).
 3. **Bucket 3: Gemini Enterprise Net ACV (Monthly Net Incremental Bookings ACV)**
    - **Data Sources**: `concord-prod.service_cloudbi.bookings` (**no T-2 lag filter**, synced in real time) and `nal_reporting` (`product = 'AGENTSPACE'`).
    - **Three-Step Reconciliation Bridge**:
@@ -155,7 +157,7 @@ In `scripts/extract_revenue_pipeline.py`, product hierarchies follow `go/plan210
 
 ---
 
-## 5. Target Data Warehouse Schema (`<YOUR_PROJECT_ID>.bhi_manu` — 11 Tables)
+## 5. Target Data Warehouse Schema (`<YOUR_PROJECT_ID>.bhi_manu` — 14 Tables)
 
 | # | Table ID | Grain | Primary Purpose & Corresponding UI View |
 | :---: | :--- | :--- | :--- |
@@ -170,6 +172,9 @@ In `scripts/extract_revenue_pipeline.py`, product hierarchies follow `go/plan210
 | 9 | `territory_quarterly_quota_2026` | `quarter × product` | Q1–Q4 quarterly breakdown of PY Baseline, Quota & Actuals by compensation product line (Tab 4 Section 3) |
 | 10 | `customer_product_revenue_daily` | `reporting_id × usage_date × fph_l3` | Fine-grained daily account × product consumption for deep drill-down queries |
 | 11 | `customer_ge_details_2026` | `reporting_id × fph_l5` | Billing-side GE sub-product consumption details |
+| 12 | `project_revenue_scorecard_2026` | `project_id × billing_account_id` | **GCP Project-Level Scorecard**: 2026 YTD totals, Sep/Oct MRR, latest single-day DRR & 7d avg across all 5,414 GCP projects (Tab 5 Workbench & BQCA) |
+| 13 | `project_monthly_revenue` | `project_id × year_month` | **GCP Project Monthly MRR Table**: 2026-01 through 2026-10 monthly MRR and average DRR curves for all 5,414 projects |
+| 14 | `project_daily_runrate` | `project_id × usage_date` | **GCP Project Daily DRR Curve Table**: Partitioned by `usage_date` and clustered by `project_id`, storing daily DRR curves & 7-day moving averages |
 
 ---
 
@@ -193,15 +198,15 @@ sequenceDiagram
     Q-->>B: Return Structured Query Result Set (data.result)
     B-->>B: Synthesize Markdown Summary (FINAL_RESPONSE) & Follow-Up Questions (FOLLOWUP_QUESTIONS)
     B-->>F: Stream Message Chunks Array
-    F-->>U: Return {thoughts, answer, sql_queries, followup_questions}
+    F-->>U: Return {thoughts, answer, sql_queries, followup_questions} (with auto time-series curve rendering)
 ```
 
 ### 6.1 Layer 1: Automated BigQuery Table & Column Semantic Metadata Sync
-- `update_bigquery_knowledge_catalog_metadata()` iterates across all 11 tables in `bhi_manu` and invokes `bq_client.update_table(table, ["description", "labels", "schema"])` to persist table descriptions and bilingual definitions for all **251 columns**.
+- `update_bigquery_knowledge_catalog_metadata()` iterates across all 14 tables in `bhi_manu` and invokes `bq_client.update_table(table, ["description", "labels", "schema"])` to persist table descriptions and bilingual definitions for all **374 columns**.
 - BigQuery automatically synchronizes these annotations into **Dataplex Universal Catalog (Knowledge Catalog)** `@bigquery` entries. The metadata sync runs automatically after each daily `WRITE_TRUNCATE` ETL job so column descriptions are never lost.
 
 ### 6.2 Layer 2: Governed Knowledge Catalog Business Glossary (`bhi-manu-2026-glossary`)
-- Registered via the Dataplex API (`https://dataplex.googleapis.com/v1/projects/<YOUR_PROJECT_ID>/locations/global/glossaries/bhi-manu-2026-glossary`) with 8 official compensation and revenue terms:
+- Registered via the Dataplex API (`https://dataplex.googleapis.com/v1/projects/<YOUR_PROJECT_ID>/locations/global/glossaries/bhi-manu-2026-glossary`) with 9 official compensation and revenue terms:
   - `rvp-revenue` (`RVP Revenue`)
   - `gross-revenue` (`Gross Revenue`)
   - `bucket-1-gcp-irevenue` (`Bucket 1: GCP iRevenue`)
@@ -210,13 +215,14 @@ sequenceDiagram
   - `ge-watermark-reconciliation` (`GE Watermark Reconciliation Bridge`)
   - `daily-run-rate-drr` (`Daily Run Rate (DRR)`)
   - `monthly-run-rate-mrr` (`Monthly Run Rate (MRR)`)
+  - `gcp-project-billing-grain` (`GCP Project ID & Billing Account Grain`)
 
 ### 6.3 Layer 3: BQCA Data Agent (`bhi-manu-2026-agent`) Published Context
 - Published via `https://geminidataanalytics.googleapis.com/v1beta/projects/<YOUR_PROJECT_ID>/locations/global/dataAgents/bhi-manu-2026-agent` with:
-  - `datasourceReferences.bq.tableReferences`: binds core analytical tables along with `schema.fields`, `synonyms`, and `tags`;
-  - `glossaryTerms`: embeds the 8 governed business terms;
-  - `exampleQueries`: 6 human-verified golden SQL question-query pairs (Verified Queries);
-  - `systemInstruction`: enforces structured Markdown output, default RVP revenue rules, and Three-Bucket reconciliation logic.
+  - `datasourceReferences.bq.tableReferences`: binds 12 core analytical tables (including `project_revenue_scorecard_2026`, `project_monthly_revenue`, and `project_daily_runrate`) along with `schema.fields`, `synonyms`, and `tags`;
+  - `glossaryTerms`: embeds the 9 governed business terms;
+  - `exampleQueries`: 9 human-verified golden SQL question-query pairs (Verified Queries, including `project_id` MRR and DRR curve lookups);
+  - `systemInstruction`: enforces structured Markdown output, default RVP revenue rules, Three-Bucket reconciliation logic, and Project-level time-series ordering conventions.
 
 ---
 
@@ -255,37 +261,52 @@ sequenceDiagram
   1. **Custom Semicolon Cookie Parser (`extract_cookie_token`)**: The Google GIS SDK writes a `g_state={"i_l":0}` cookie containing curly braces and double quotes on the same origin. Python's standard `http.cookies.SimpleCookie` (used by `request.cookies`) aborts parsing when encountering `g_state={"i_l":0}`, dropping any subsequent cookies. Our backend splits the raw `Cookie` header by `;` to reliably extract `argolis_app_session`.
   2. **COOP Header & Popup Mode**: HTML routes explicitly return `cross-origin-opener-policy: same-origin-allow-popups`, and the frontend GIS button initializes with `ux_mode: 'popup'` inside a `setTimeout(..., 80)` callback so browser popup `postMessage` events are never blocked.
   3. **Scale-to-Zero & Multi-Instance Statelessness**: All session claims (`sub`, `email`, `name`, `iat`, `exp`, `type`) are signed with `HMAC-SHA256` using the `SESSION_SECRET` environment variable and stored in the client's `HttpOnly` cookie, surviving container cold starts and horizontal scaling.
+  4. **Zero Pre-Login Information Exposure**: Unauthenticated requests to `/` or `/releasenotes` receive only a minimal `3.4 KB` login gate shell (`_get_unauth_login_html`), and the protected SPA DOM is wrapped inside `#appProtectedShell { display: none }` so zero business metric names, customer data, or allowlisted emails are exposed prior to SSO verification.
 
-### 7.2 Backend API Contract (`app/main.py`)
-All `/api/*` endpoints are protected by `Depends(require_session)` (validating the `HttpOnly` session cookie, gateway header, or Bearer token against `ALLOWED_DOMAINS` and `ALLOWED_USERS`):
+### 7.2 Backend API Contract & Four-Tier Caching Architecture (`app/main.py`)
+All `/api/*` endpoints are protected by `Depends(require_session)` and powered by a **Four-Tier Caching Architecture (L1 `localStorage` 6h snapshot + L2 `sessionStorage` DRR trend cache + L3 backend `ThreadPoolExecutor(max_workers=8)` with 1-hour `_DATA_CACHE` + L4 one-click Force Refresh)**:
 
-| HTTP Method & Path | Description | Underlying Tables / Services |
+| HTTP Method & Path | Description | Underlying Tables / Cache Policy |
 | :--- | :--- | :--- |
-| `GET /` | Serves the main dashboard HTML page (`COOP: same-origin-allow-popups`) | `app/templates/index.html` |
-| `GET /releasenotes` | Serves the standalone Release Notes & Changelog HTML page (`v1.0.0` → `v1.9.0`) | `app/templates/releasenotes.html` |
-| `GET /authconfig` | Returns `client_id`, `allowed_domains`, and `session_ttl_seconds` for GIS | Environment Configuration |
+| `GET /` | Serves the main dashboard HTML (returns 3.4 KB login gate shell if unauthenticated; `COOP: same-origin-allow-popups`) | `app/templates/index.html` |
+| `GET /releasenotes` | Serves the standalone Release Notes & Changelog HTML page (`v1.0.0` → `v1.11.0`) | `app/templates/releasenotes.html` |
+| `GET /authconfig` | Returns `client_id` and `session_ttl_seconds` for GIS (exposes zero allowlist details) | Environment Configuration |
 | `POST /api/auth/session` | Verifies the 1-hour Google `id_token` and issues a 7-day `HttpOnly` Session Cookie | `google.oauth2.id_token` + `PyJWT` |
 | `GET /api/whoami` | Validates current session status (triggers sliding auto-renewal if remaining TTL `< 50%`) | `require_session` |
-| `POST /api/auth/logout` | Clears the `argolis_app_session` cookie and logs out | Cookie Destruction |
-| `GET /api/dashboard-data` | Returns Territory Three-Bucket summaries, KPI cards, NAL scorecards, monthly trends & account details | `bhi_manu` Analytical Tables |
-| `GET /api/nal-trend?nal_name=...` | Returns 2026 daily DRR time series for a specific NAL or `ALL` (GCP/AI/DA/DB in both RVP & Gross) | `customer_daily_runrate` |
-| `GET /api/customer-trend?reporting_id=...` | Returns 2026 daily DRR time series and 7-day moving average for a specific customer | `customer_daily_runrate` |
+| `POST /api/auth/logout` | Clears the `argolis_app_session` cookie and purges client-side local cache snapshots | Cookie & Cache Destruction |
+| `GET /api/overview` | Returns Territory YTD RVP/Gross KPIs, latest single-day DRR & current/prior month MRR (supports `?refresh=1`) | `_DATA_CACHE["overview"]` (1h TTL) + Browser `localStorage` |
+| `GET /api/quota-attainment` | Returns 12-NAL Three-Bucket Quota reconciliation, quarterly quotas & As-of Date metadata | `_DATA_CACHE["quota_attainment"]` (1h TTL) + Browser `localStorage` |
+| `GET /api/scorecard` | Concurrently queries and returns the 12-NAL rollup scorecard and 238-account detail scorecard | `_DATA_CACHE["scorecard"]` (1h TTL) + Browser `localStorage` |
+| `GET /api/monthly` | Returns 2026 monthly MRR and product pillar trends | `_DATA_CACHE["monthly"]` (1h TTL) + Browser `localStorage` |
+| `GET /api/ge-stats` | Concurrently queries and returns GE customer contracts, NAL rollups & monthly bookings trends | `_DATA_CACHE["ge_stats"]` (1h TTL) + Browser `localStorage` |
+| `GET /api/nal-trend?nal_name=...` | Returns 2026 daily DRR time series for a specific NAL or `ALL` (both RVP & Gross fields) | `_DATA_CACHE["nal_trend:*"]` (1h TTL) + Browser `_nalTrendCache` |
+| `GET /api/customer-trend?reporting_id=...` | Returns 2026 daily DRR time series for a specific customer (both RVP & Gross fields) | `_DATA_CACHE["cust_trend:*"]` (1h TTL) + Browser `_custTrendCache` |
+| `GET /api/projects/top` | Returns top GCP Projects (YTD RVP/Gross, Sep/Oct MRR, latest single-day DRR) and territory project summary stats | `_DATA_CACHE["projects_top:*"]` (1h TTL) |
+| `GET /api/project-trend?project_id=...` | Returns project scorecard metadata, 2026 monthly MRR series, and 2026 daily DRR curve series for any `project_id` / `project_number` | `_DATA_CACHE["proj_trend:*"]` (1h TTL) + Browser `_projTrendLocalCache` |
+| `GET /api/cache/status` | Lightweight (`<5ms`) cache metadata & BigQuery table modification timestamp check for frontend SWR | In-Memory Metadata Read |
+| `POST /api/cache/clear` | Clears all backend in-memory caches so subsequent `?refresh=1` calls fetch fresh BigQuery data | `_DATA_CACHE.clear()` |
 | `GET /api/agent/catalog` | Returns metadata for the bound BQCA Data Agent and Knowledge Catalog glossary | `geminidataanalytics` & `dataplex` |
 | `POST /api/agent/chat` | Invokes BQCA `:chat`, returning semantic reasoning (`thoughts`), Markdown answer (`answer`), executed SQL (`sql_queries`), and follow-ups (`followup_questions`) | `geminidataanalytics.googleapis.com/v1beta` |
 
 ### 7.3 Frontend 16:9 Widescreen & UX Highlights (`app/templates/index.html` & `releasenotes.html`)
 1. **16:9 Widescreen Responsive Layout**: Uses `max-width: 98vw` to display multi-bucket, multi-metric scorecards without horizontal cramping.
-2. **Bi-Directional Sticky Table Headers & First Columns**:
+2. **Four-Tier Caching & 5-Step Dynamic Calculation Progress Bar**:
+   - **Initial Cold Load (5-Step Progress Panel `#dataLoadingPanel`)**: Hides unpopulated KPI cards while the 5 core endpoints load in parallel (eliminating `$0` placeholders) and displays real-time `12% → 100%` completion across 5 step chips (`⏳ → ✅`);
+   - **`0ms` Instant Page Refresh (`localStorage` + SWR Version Check)**: Pressing `F5` or returning from `/releasenotes` restores all datasets from `localStorage` in `0ms` without showing the loading bar, while silently checking `/api/cache/status` in the background; switching between RVP and Gross tabs reuses `_nalTrendCache` / `_custTrendCache` in memory for `0ms` chart redraws with zero network calls;
+   - **One-Click Force Refresh (`#btnRefreshCache`)**: A header button (**`⚡ Local Cache Hit · 🔄 Force Refresh`**) lets users clear both frontend and backend caches and re-query BigQuery on demand.
+3. **Bi-Directional Sticky Table Headers & First Columns**:
    - Table headers (`thead th`) stick to the top (`position: sticky; top: 0; z-index: 20`);
    - The first column (NAL Name or Account Name) sticks to the left (`position: sticky; left: 0; z-index: 10`, top-left corner `z-index: 30`) for effortless vertical and horizontal scrolling.
-3. **Click-First-Column DRR Drill-Down (Two-Tier NAL & Account Curves)**:
-   - Clicking any row's **first column (NAL Name or Account Name)** smoothly scrolls to and loads the corresponding **NAL-level DRR chart** or **Account-level DRR chart**.
-4. **Quota Attainment As-of Date Reconciliation Banner**:
-   - Tab 4 displays a prominent reconciliation cutoff banner distinguishing consumption metrics (`T-2` latest complete billing date for Buckets 1 & 2) from real-time contract bookings (Bucket 3 GE Net ACV) for side-by-side verification with `go/rainmaker`.
-5. **Multi-Line BQCA Chat Editor**:
-   - The `#agentInput` `<textarea rows="3">` inserts a newline on `Enter` so users can compose structured multi-line queries, while `Ctrl/Cmd + Enter` or clicking **Send Query 🚀** submits the request.
-6. **Standalone Release Notes Page (`/releasenotes`)**:
-   - Accessible from the top navigation bar (**📋 Release Notes** button next to the **🔒 7-Day Session** badge), documenting all 10 releases (`v1.0.0` through `v1.9.0`) with category filter chips and live keyword search.
+4. **Click-First-Column DRR Drill-Down & GCP Project-Level Curve Workbench (Three-Tier Curves)**:
+   - Clicking any row's **first column (NAL Name or Account Name)** smoothly scrolls to and loads the corresponding **NAL-level DRR chart** or **Account-level DRR chart**;
+   - Tab 5 features the **🔍 GCP Project ID MRR & DRR Curve Quick-Lookup Workbench**, allowing users to filter by customer or enter any `project_id` / `project_number` to plot side-by-side **2026 Monthly MRR Walk** and **2026 Daily DRR Curve + 7-Day Moving Average** charts (with RVP/Gross toggle and one-click AI diagnosis).
+5. **Quota Attainment As-of Date Reconciliation Banner**:
+   - The Top Banner and Tab 4 display a prominent reconciliation cutoff banner distinguishing consumption metrics (`T-2` latest complete billing date for Buckets 1 & 2) from real-time contract bookings (Bucket 3 GE Net ACV) for side-by-side verification with `go/rainmaker`.
+6. **Multi-Line BQCA Chat Editor + Automatic Inline Time-Series Curve Rendering**:
+   - The `#agentInput` `<textarea rows="3">` inserts a newline on `Enter` so users can compose structured multi-line queries, while clicking **Send Query 🚀** submits the request;
+   - Whenever BQCA executes a SQL query returning a time column (`usage_date`, `year_month`, `date`, `month`) and numeric revenue/DRR/MRR metrics, the frontend automatically renders an interactive **Chart.js Line/Bar Curve** inside the AI chat bubble.
+7. **Standalone Release Notes Page (`/releasenotes`)**:
+   - Accessible from the top navigation bar (**📋 Release Notes** button next to the **🔒 7-Day Session** badge), documenting all 13 releases (`v1.0.0` through `v1.12.0`) with category filter chips and live keyword search.
 
 ---
 

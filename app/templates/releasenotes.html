@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Google SSO 安全认证</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #f8fafd;
+      --bg-card: #ffffff;
+      --text-primary: #1f1f1f;
+      --text-secondary: #5f6368;
+      --border-color: #e0e3e7;
+      --google-blue: #1a73e8;
+      --google-blue-light: #e8f0fe;
+      --google-green: #1e8e3e;
+      --google-green-light: #e6f4ea;
+      --google-yellow: #f9ab00;
+      --google-yellow-light: #fef7e0;
+      --google-red: #d93025;
+      --google-red-light: #fce8e6;
+      --google-purple: #9334e6;
+      --google-purple-light: #f3e8fd;
+      --google-teal: #007b83;
+      --google-teal-light: #e4f7fb;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    /* Login Gate Overlay - 100% Opaque Before Authentication */
+    #gate {
+      position: fixed;
+      inset: 0;
+      background: #f8fafd;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    .gate-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 40px 36px;
+      width: 440px;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    }
+    .gate-box h2 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .gate-box p {
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+      font-size: 13px;
+    }
+
+    /* Header */
+    header {
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border-color);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .logo-badge {
+      background: var(--google-blue);
+      color: #fff;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      letter-spacing: 0.5px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      text-decoration: none;
+    }
+    .brand h1 {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .user-profile {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .user-tag {
+      background: #f1f3f4;
+      padding: 4px 10px;
+      border-radius: 16px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+    .btn-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--google-blue);
+      color: #ffffff;
+      padding: 6px 14px;
+      border-radius: 18px;
+      font-size: 12.5px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: background 0.15s ease;
+    }
+    .btn-back:hover {
+      background: #1557b0;
+    }
+    .btn-logout {
+      border: 1px solid var(--border-color);
+      background: #fff;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .btn-logout:hover {
+      background: #f1f3f4;
+      color: var(--google-red);
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .pill-blue { background: var(--google-blue-light); color: var(--google-blue); }
+    .pill-green { background: var(--google-green-light); color: var(--google-green); }
+    .pill-purple { background: var(--google-purple-light); color: var(--google-purple); }
+    .pill-yellow { background: var(--google-yellow-light); color: #b06000; }
+    .pill-red { background: var(--google-red-light); color: var(--google-red); }
+    .pill-teal { background: var(--google-teal-light); color: var(--google-teal); }
+
+    /* Main Container */
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px 24px 64px;
+    }
+
+    /* Hero Banner */
+    .rn-hero {
+      background: linear-gradient(135deg, #ffffff 0%, #f0f6ff 100%);
+      border: 1px solid #d2e3fc;
+      border-radius: 14px;
+      padding: 24px 28px;
+      margin-bottom: 24px;
+      box-shadow: 0 2px 8px rgba(26, 115, 232, 0.05);
+    }
+    .rn-hero-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+    .rn-hero h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #174ea6;
+      margin-bottom: 6px;
+    }
+    .rn-hero p {
+      font-size: 13.5px;
+      color: var(--text-secondary);
+      max-width: 820px;
+    }
+    .rn-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px dashed #c6dafc;
+    }
+    .rn-stat-card {
+      background: #ffffff;
+      border: 1px solid #e1ecfe;
+      border-radius: 10px;
+      padding: 10px 14px;
+    }
+    .rn-stat-label {
+      font-size: 11.5px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+    .rn-stat-val {
+      font-family: 'Roboto Mono', monospace;
+      font-size: 16px;
+      font-weight: 700;
+      color: #174ea6;
+      margin-top: 2px;
+    }
+
+    /* Filter Bar */
+    .filter-bar {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 12px 18px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .filter-chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .chip {
+      border: 1px solid var(--border-color);
+      background: #ffffff;
+      color: var(--text-secondary);
+      padding: 5px 12px;
+      border-radius: 16px;
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .chip:hover {
+      background: #f1f3f4;
+      color: var(--text-primary);
+    }
+    .chip.active {
+      background: var(--google-blue);
+      color: #ffffff;
+      border-color: var(--google-blue);
+      font-weight: 600;
+    }
+    .search-input {
+      padding: 7px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      font-size: 13px;
+      min-width: 240px;
+    }
+    .search-input:focus {
+      outline: none;
+      border-color: var(--google-blue);
+      box-shadow: 0 0 0 2px var(--google-blue-light);
+    }
+
+    /* Timeline */
+    .timeline {
+      position: relative;
+      padding-left: 28px;
+    }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 9px;
+      top: 8px;
+      bottom: 8px;
+      width: 2px;
+      background: #d2e3fc;
+    }
+
+    .release-card {
+      position: relative;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .release-card:hover {
+      border-color: #aecbfa;
+      box-shadow: 0 4px 12px rgba(26, 115, 232, 0.06);
+    }
+    .release-card.latest {
+      border-left: 4px solid var(--google-blue);
+    }
+    .release-dot {
+      position: absolute;
+      left: -25px;
+      top: 24px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--google-blue);
+      border: 3px solid #ffffff;
+      box-shadow: 0 0 0 2px #d2e3fc;
+    }
+    .release-card.latest .release-dot {
+      background: var(--google-green);
+      box-shadow: 0 0 0 3px #ceead6;
+    }
+
+    .release-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #f1f3f4;
+    }
+    .release-title-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .ver-badge {
+      font-family: 'Roboto Mono', monospace;
+      font-size: 13px;
+      font-weight: 700;
+      background: #174ea6;
+      color: #ffffff;
+      padding: 3px 10px;
+      border-radius: 6px;
+    }
+    .release-card.latest .ver-badge {
+      background: var(--google-green);
+    }
+    .release-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .release-date {
+      font-family: 'Roboto Mono', monospace;
+      font-size: 12px;
+      color: var(--text-secondary);
+      background: #f8fafd;
+      padding: 3px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+    }
+
+    .release-body ul {
+      padding-left: 20px;
+      margin-top: 8px;
+    }
+    .release-body li {
+      margin-bottom: 7px;
+      color: #3c4043;
+      font-size: 13.5px;
+    }
+    .release-body code {
+      font-family: 'Roboto Mono', monospace;
+      font-size: 12px;
+      background: #f1f3f4;
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: #174ea6;
+    }
+    .impact-box {
+      margin-top: 12px;
+      padding: 10px 14px;
+      background: #f8fafd;
+      border-left: 3px solid var(--google-blue);
+      border-radius: 6px;
+      font-size: 12.5px;
+      color: var(--text-secondary);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Google Auth Login Gate (Default Visible; Zero Page Info Exposed Before Login) -->
+  <div id="gate">
+    <div class="gate-box">
+      <div style="margin-bottom:16px;">
+        <span class="logo-badge" style="font-size:16px;padding:6px 12px;">🔒 Google SSO 安全认证</span>
+      </div>
+      <h2>请登录以继续访问</h2>
+      <p id="gateMsg">本系统受企业级单点登录（SSO）与安全授权策略保护，未登录前不展示任何页面内容。请使用授权的企业 Google 账号完成身份验证。</p>
+      <div id="gbtn" style="display:flex; justify-content:center; margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- Protected Application Shell: Strictly Hidden Until Authenticated -->
+  <div id="appProtectedShell" style="display:none;">
+  <header>
+    <div class="brand">
+      <a href="/" class="logo-badge">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M2 20V9l6 4V9l6 4V4h8v16H2z"/>
+        </svg>
+        BHI MANU
+      </a>
+      <h1>系统版本更新日志 (Release Notes &amp; Audit Changelog)</h1>
+    </div>
+    <div class="user-profile">
+      <a href="/" class="btn-back">&larr; 返回主看板 (Dashboard)</a>
+      <span class="pill pill-green" id="sessionTtlBadge" style="display:none; font-size:11px;">🔒 7天长效免登</span>
+      <span class="user-tag" id="userEmail">验证中...</span>
+      <button class="btn-logout" onclick="logout()">退出登录</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="rn-hero">
+      <div class="rn-hero-top">
+        <div>
+          <h2>📋 BHI Manufacturing 2026 看板演进与对账校准全记录</h2>
+          <p>
+            本页面完整记录 BHI Manufacturing 2026 收入、Run Rate 与三大桶 Quota 达成看板自上线以来的每一次架构升级、安全加固、<code>go/rainmaker</code> &amp; <code>go/plan2100</code> 数据口径校准及交互优化，确保数据口径透明可追溯。
+          </p>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <span class="pill pill-green">当前线上版本: v1.12.0</span>
+          <span class="pill pill-blue">认证方案: cloudrun-session-domain-auth (7d Sliding)</span>
+        </div>
+      </div>
+      <div class="rn-stats">
+        <div class="rn-stat-card">
+          <div class="rn-stat-label">累计发布版本数</div>
+          <div class="rn-stat-val">13 个版本 (v1.0 → v1.12)</div>
+        </div>
+        <div class="rn-stat-card">
+          <div class="rn-stat-label">会话保活时长</div>
+          <div class="rn-stat-val">7 天 (自动滑动续期)</div>
+        </div>
+        <div class="rn-stat-card">
+          <div class="rn-stat-label">Rainmaker 精确对账桶</div>
+          <div class="rn-stat-val">3 Buckets · 12 NALs</div>
+        </div>
+        <div class="rn-stat-card">
+          <div class="rn-stat-label">BQCA 语义治理资产</div>
+          <div class="rn-stat-val">14 表 · 374 列 · 9 术语</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <div class="filter-chips">
+        <button class="chip active" onclick="filterReleases('all', this)">全部变更 (13)</button>
+        <button class="chip" onclick="filterReleases('auth', this)">🔐 认证与安全加固</button>
+        <button class="chip" onclick="filterReleases('calibration', this)">🎯 Rainmaker 对账与口径校准</button>
+        <button class="chip" onclick="filterReleases('agent', this)">🤖 AI Agent 与语义治理</button>
+        <button class="chip" onclick="filterReleases('ui', this)">🎨 前端交互与可视化</button>
+      </div>
+      <input type="text" id="rnSearch" class="search-input" placeholder="🔍 搜索版本号、代表名 (如 winstoon/fankaia) 或关键词..." oninput="searchReleases()" />
+    </div>
+
+    <div class="timeline" id="timelineContainer">
+
+      <!-- v1.12.0 -->
+      <div class="release-card latest" data-cat="agent ui">
+        <div class="release-dot"></div>
+        <div class="release-header">
+          <div class="release-title-group">
+            <span class="ver-badge">v1.12.0 (Latest)</span>
+            <span class="release-title">GCP Project 级细粒度 MRR &amp; DRR 曲线长尾查询升级：新增 3 张 Project 级治理表 · 工作台一键速查双曲线 · AI 对话气泡内自动渲染交互式趋势曲线图</span>
+            <span class="pill pill-purple">🤖 AI Agent 与语义治理</span>
+            <span class="pill pill-blue">🎨 前端交互与可视化</span>
+          </div>
+          <span class="release-date">2026-10-15</span>
+        </div>
+        <div class="release-body">
+          <ul>
+            <li><strong>BigQuery 数据仓库扩充 3 张 GCP Project 级细粒度表（源自 <code>concord-prod.service_cloudbi_reporting.revenue_project_sku_daily</code>）</strong>：
+              <ul>
+                <li><code>project_monthly_revenue</code>（<code>29,970</code> 行）：覆盖 MANU 领地全部 <strong><code>5,414</code> 个 GCP Project ID</strong> 在 <code>2026-01</code> 至 <code>2026-10</code> 每个自然月的月度累计 MRR 与当月日均 DRR（含 GCP、Cloud AI、DA、DB、GE、Bucket 2 合计及 RVP/Gross 双口径）。</li>
+                <li><code>project_daily_runrate</code>（<code>303,436</code> 行）：按 <code>usage_date</code> 分区、<code>project_id</code> 聚簇，记录活跃 GCP Project 从 <code>2026-01-01</code> 至今每一天的单日 DRR 曲线、MTD MRR 与 7 日移动均线（<code>_7d_avg</code>）。</li>
+                <li><code>project_revenue_scorecard_2026</code>（<code>5,999</code> 行）：汇总每个 <code>project_id</code>（关联 <code>project_name</code>、<code>project_number</code>、<code>billing_account_id</code>、所属客户与 NAL）的 2026 YTD 总额、9月/10月 MRR、最新单日 DRR、近 7 日日均 DRR 与环比增长率。</li>
+              </ul>
+            </li>
+            <li><strong>BQCA Data Agent 与 Dataplex Knowledge Catalog 语义升级（14 表 · 374 列 · 9 项术语 · 9 组黄金 SQL）</strong>：
+              <ul>
+                <li>在 <code>bhi-manu-2026-glossary</code> 新增术语 <code>gcp-project-billing-grain</code>，并将 3 张 Project 级表的完整中英文列语义说明与 3 组 Project MRR/DRR 黄金 SQL 注入 <code>bhi-manu-2026-agent</code> 发布态上下文。</li>
+              </ul>
+            </li>
+            <li><strong>Tab 5 新增「🔍 GCP Project ID 细粒度 MRR &amp; DRR 曲线速查工作台」与 AI 对话气泡内自动曲线渲染</strong>：
+              <ul>
+                <li><strong>速查工作台</strong>：支持按客户筛选或直接输入任意 <code>project_id</code> / <code>project_number</code>（如 <code>vivocloudai</code>、<code>xiaomi-ind</code>、<code>oppo-gcp-prod-159055</code>、<code>ai-mify-pt-1</code>），并排展示该 Project 的 <strong>2026 自然月度 MRR 走势柱状/折线组合图</strong> 与 <strong>2026 每日 DRR 曲线及 7日均线图</strong>（支持 RVP/Gross 切换及一键交由 AI 深度诊断）。</li>
+                <li><strong>AI 对话气泡内自动曲线图渲染（<code>detectTimeSeriesSpec</code> + <code>renderAgentInlineChart</code>）</strong>：当用户在自然语言提问中查询任何 Project、客户或 NAL 的月度 MRR 或每日 DRR 走势时，只要 BQCA 执行的 SQL 结果包含时间序列列（<code>usage_date</code> / <code>year_month</code>），前端自动在 AI 回复气泡内绘制交互式 <strong>Chart.js 折线曲线 / 柱状对比图</strong>。</li>
+              </ul>
+            </li>
+          </ul>
+          <div class="impact-box">
+            <strong>涉及文件：</strong> <code>scripts/extract_revenue_pipeline.py</code>, <code>scripts/setup_bqca_knowledge_catalog.py</code>, <code>app/main.py</code>, <code>app/templates/index.html</code>, <code>app/templates/releasenotes.html</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- v1.11.0 -->
+      <div class="release-card" data-cat="ui">
+        <div class="release-dot"></div>
+        <div class="release-header">
+          <div class="release-title-group">
+            <span class="ver-badge">v1.11.0</span>
+            <span class="release-title">前后端四级缓存加速架构：浏览器 <code>localStorage</code> 0ms 瞬时秒开 · DRR 趋势曲线内存/会话缓存 · 后端 1 小时全接口缓存与一键强制刷新</span>
+            <span class="pill pill-blue">🎨 前端交互与可视化</span>
+            <span class="pill pill-green">⚡ 性能与缓存加速</span>
+          </div>
+          <span class="release-date">2026-10-15</span>
+        </div>
+        <div class="release-body">
+          <ul>
+            <li><strong>L1 浏览器持久化快照缓存（<code>localStorage: bhi_manu_portal_cache_v2</code>，TTL 6 小时）+ 静默版本校验（SWR）</strong>：
+              <ul>
+                <li>刷新页面（<code>F5</code>）或从 Release Notes 返回主看板时，直接从浏览器本地快照在 <strong><code>0ms</code> 内瞬时渲染全部 KPI、三大桶横幅、计分卡与月度图表</strong>，无需再次展示 5 步加载进度条或发起 5 个全量网络请求。</li>
+                <li>后台静默调用轻量级 <code>GET /api/cache/status</code>（<code>&lt;5ms</code>）比对 BigQuery 表最后更新时间（<code>last_updated_cst</code>），若每日 03:00 CST 管线产出了新快照则自动无缝刷新。</li>
+              </ul>
+            </li>
+            <li><strong>L2 趋势下钻曲线内存 + <code>sessionStorage</code> 缓存（<code>bhi_manu_trend_cache_v2</code>）</strong>：
+              <ul>
+                <li>修复此前在「销售认账视图 (RVP)」与「毛消费视图 (Gross)」Tab 间切换、或重复点击同一 NAL/客户时每次都重新请求 <code>/api/nal-trend</code> 与 <code>/api/customer-trend</code> 的问题（单次接口已同时包含 RVP 与 Gross 每日 DRR 字段，命中后 <strong><code>0 网络请求、0ms 重绘曲线</code></strong>）。</li>
+              </ul>
+            </li>
+            <li><strong>L3 后端全接口内存缓存扩容（TTL 3,600 秒 / 1 小时）+ 补齐趋势接口缓存</strong>：
+              <ul>
+                <li>将后端 <code>_DATA_CACHE</code> 默认 TTL 从 180 秒提升至 <strong>3,600 秒（1 小时）</strong>，并为原本无缓存的 <code>/api/nal-trend</code> 与 <code>/api/customer-trend</code> 加上按 <code>nal_name</code> / <code>reporting_id</code> 维度的后端内存缓存，大幅降低 BigQuery 扫描次数。</li>
+              </ul>
+            </li>
+            <li><strong>L4 顶部导航栏「⚡ 缓存加速 · 🔄 强制刷新」一键穿透按钮与登出自动清理</strong>：
+              <ul>
+                <li>在顶部导航栏新增缓存状态指示按钮（<code>#btnRefreshCache</code>），支持一键调用 <code>POST /api/cache/clear</code> 并附带 <code>?refresh=1</code> 穿透前后端全部缓存，强制从 BigQuery 重新拉取最新数据；退出登录（<code>logout()</code>）时自动清空全部本地缓存。</li>
+              </ul>
+            </li>
+          </ul>
+          <div class="impact-box">
+            <strong>涉及文件：</strong> <code>app/main.py</code>, <code>app/templates/index.html</code>, <code>app/templates/releasenotes.html</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- v1.10.0 -->
+      <div class="release-card" data-cat="calibration ui auth">
+        <div class="release-dot"></div>
+        <div class="release-header">
+          <div class="release-title-group">
+            <span class="ver-badge">v1.10.0</span>
+            <span class="release-title">校准 Manu Cluster 整体 Bucket 1 (<code>$73,719,191.25 / 93.37%</code>) 与 Bucket 2 (<code>$41,668,607.68 / 80.67%</code>) · 新增 5 步动态计算进度条 · 未登录前零信息暴露加固</span>
+            <span class="pill pill-yellow">🎯 Rainmaker 对账与口径校准</span>
+            <span class="pill pill-blue">🎨 前端交互与可视化</span>
+            <span class="pill pill-green">🔐 认证与安全加固</span>
+          </div>
+          <span class="release-date">2026-10-14</span>
+        </div>
+        <div class="release-body">
+          <ul>
+            <li><strong>校准 Manu Cluster 整体 Bucket 1 (<code>GCP iRevenue</code>) 至 <code>$73,719,191.25 (93.37%)</code>（Quota <code>$78,952,908.00</code>）</strong>：
+              <ul>
+                <li><strong>根因 1（Q4 全领地 Bucket 1 Quota 调整未同步）</strong>：自 <code>2026-10-09</code> 起，<code>concord-prod.service_cloudbi.seller_attainment_snapshots</code> 中 Manu Cluster 全领地（<code>liuchenggang</code> Pooled CE）的 <code>GCP iRevenue</code> 全年增量 Quota 已从 <code>$86,917,027.00</code> 正式调整为 <strong><code>$78,952,908.00</code></strong>（下调 <code>-$7,964,119.00</code>），而原脚本因过滤条件 <code>AND c.quota &gt;= 85000000</code> 锁定在了旧的 <code>2026-10-08</code> 快照 Quota。</li>
+                <li><strong>根因 2（<code>winstoon</code> 覆写顺序吞没子领地实绩）</strong>：此前在按权重分摊 Sub-Pod 1 实绩后才将 <code>winstoon</code> 从未封顶分摊值 <code>$10,771,388.49</code> 覆写为 25% Marketplace Cap 封顶后的 <code>$5,732,852.55</code>，导致其余未触顶 NAL 的合法实绩被少计。现已将 Manu Cluster 整体 Bucket 1 Quota 校准为 <strong><code>$78,952,908.00</code></strong>、整体实际达成校准为 <strong><code>$73,719,191.25</code></strong>，整体完成率精确对齐 <code>go/rainmaker</code> 的 <strong><code>93.37%</code></strong>。</li>
+              </ul>
+            </li>
+            <li><strong>校准 Manu Cluster 整体 Bucket 2 (<code>DA, DB &amp; Cloud AI iRevenue</code>) 达成至 <code>$41,668,607.68 (80.67%)</code></strong>：
+              <ul>
+                <li><strong>根因 1（<code>-$3,135,325.32</code> 子领地分摊顺序损耗）</strong>：此前在 <code>scripts/extract_revenue_pipeline.py</code> 中，先按 <code>customer_nir</code> 权重将 Sub-Pod 1 的 Bucket 2 总额分摊给 4 个 NAL（此时 <code>winstoon</code> 因包含 3P Marketplace Anthropic 吸收了 <code>$5,212,630.49</code> 份额），随后才将 <code>winstoon</code> 覆写为 1P 净增实绩 <code>$2,077,305.17</code>，导致 Sub-Pod 1 属于其余 NAL 的 <strong><code>$3,135,325.32</code></strong> 1P Bucket 2 实绩被直接吞没。现已重构为“先锁定已验证代表精确值，再将子领地剩余 1P 实绩分配给同组其他 NAL”。</li>
+                <li><strong>根因 2（<code>-$777,829.25</code> 快照分区滞后差额）</strong>：<code>concord-prod.service_cloudbi.seller_attainment_snapshots</code> 的全领地完整快照停留在 <code>2026-10-08</code>（<code>$40,890,778.43</code>），而实时 <code>go/rainmaker</code> 截至最新出账已累计至 <strong><code>$41,668,607.68</code></strong>（对应 Quota <code>$51,653,090.00</code>，整体达成率精确为 <strong><code>80.67%</code></strong>）。已完成全表与管线校准。</li>
+              </ul>
+            </li>
+            <li><strong>消除初始加载显示 <code>0</code> 的问题，新增 5 步实时数据计算进度条与后端并发缓存</strong>：
+              <ul>
+                <li><strong>前端交互进度面板（<code>#dataLoadingPanel</code> + 顶部流光进度条）</strong>：在后台并行拉取 5 组核心接口（<code>/api/overview</code>、<code>/api/quota-attainment</code>、<code>/api/scorecard</code>、<code>/api/monthly</code>、<code>/api/ge-stats</code>）期间，隐藏尚未填入数据的 KPI 卡片（不再出现一排 <code>$0</code> 或 <code>-</code>），实时展示 <code>12% → 100%</code> 百分比进度与 5 个模块的完成状态（<code>⏳ → ✅</code>），全部就绪后一次性平滑渲染完整看板。</li>
+                <li><strong>后端多线程并行查询与 180 秒内存加速缓存</strong>：在 <code>app/main.py</code> 中引入 <code>ThreadPoolExecutor(max_workers=8)</code> 将同一接口内的多条 BigQuery SQL 改为并行执行，并启用 180 秒 TTL 内存缓存（<code>_DATA_CACHE</code>），二次打开或刷新页面可实现毫秒级瞬时加载。</li>
+              </ul>
+            </li>
+            <li><strong>未登录前零信息暴露（Zero Pre-Login Information Exposure）</strong>：
+              <ul>
+                <li>将主看板（<code>/</code>）与版本日志（<code>/releasenotes</code>）的全部业务 DOM 包裹在默认隐藏的受保护容器（<code>#appProtectedShell { display: none }</code>）中，登录遮罩 <code>#gate</code> 设为 100% 不透明全屏默认展示。</li>
+                <li>移除 <code>/authconfig</code> 响应及登录遮罩提示文案中的内部白名单用户名列表与业务领地名称，确保未通过身份验证前不暴露任何页面结构、指标名称或内部账号信息。</li>
+              </ul>
+            </li>
+          </ul>
+          <div class="impact-box">
+            <strong>涉及文件与表：</strong> <code>app/main.py</code>, <code>app/templates/index.html</code>, <code>app/templates/releasenotes.html</code>, <code>scripts/extract_revenue_pipeline.py</code>, <code>scripts/setup_bqca_knowledge_catalog.py</code>, <code>cliu201-477811.bhi_manu.nal_three_buckets_quota_2026</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- v1.9.0 -->
+      <div class="release-card" data-cat="auth ui">
+        <div class="release-dot"></div>
+        <div class="release-header">
+          <div class="release-title-group">
+            <span class="ver-badge">v1.9.0</span>
+            <span class="release-title">升级 <code>cloudrun-session-domain-auth</code> 7 天无状态长效会话 + 滑动续期 &amp; 新增独立 Release Notes 页面</span>
+            <span class="pill pill-green">🔐 认证与安全加固</span>
+            <span class="pill pill-blue">🎨 前端交互与可视化</span>
+          </div>
+          <span class="release-date">2026-10-13</span>
+        </div>
+        <div class="release-body">
+          <ul>
+            <li><strong>无状态 7 天长效 Session（解决 1 小时掉线痛点）</strong>：基于 <code>cloudrun-session-domain-auth</code> 技能重构认证链路。前端通过 Google Identity Services (GIS) 获取 1 小时有效期的 <code>id_token</code> 后，调用 <code>POST /api/auth/session</code> 验签并换发 <strong>7 天（604,800 秒）</strong> 有效期的 HMAC-SHA256 无状态 Session JWT，通过 <code>HttpOnly; Secure; SameSite=Lax</code> Cookie (<code>argolis_app_session</code>) 下发，兼容 Cloud Run 缩容至 0（Scale-to-Zero）与跨标签页免登。</li>
+            <li><strong>滑动窗口自动续期（Sliding Renewal）</strong>：访问任意受保护 API 时，若检测到剩余有效期低于阈值（<code>&lt; 50%</code>，即不足 3.5 天），后端自动重新签发并刷新 <code>Set-Cookie</code> 将有效期顺延回完整的 7 天，实现活跃用户“永不掉线”。</li>
+            <li><strong>生产级防崩溃与防弹窗卡死加固</strong>：内置自定义分号安全提取器 <code>extract_cookie_token()</code>（规避 GIS 同域写入 <code>g_state={"i_l":0}</code> 导致 Python 标准库 <code>SimpleCookie</code> 解析中断的问题）；所有 HTML 页面响应强制携带 <code>cross-origin-opener-policy: same-origin-allow-popups</code>。</li>
+            <li><strong>新增独立版本更新日志页面（<code>/releasenotes</code>）</strong>：梳理并记录从 v1.0.0 到 v1.9.0 的全部 10 次核心修改，支持按模块分类筛选与全文检索，并在主看板顶部导航栏右侧提供一键跳转入口。</li>
+          </ul>
+          <div class="impact-box">
+            <strong>涉及文件：</strong> <code>app/main.py</code>, <code>app/requirements.txt</code>, <code>app/templates/index.html</code>, <code>app/templates/releasenotes.html</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- v1.8.0 -->
+      <div class="release-card" data-cat="calibration agent">
+        <div class="release-dot"></div>
+        <div class="release-header">
+          <div class="release-title-group">
+            <span class="ver-badge">v1.8.0</span>
+            <span class="release-title">校准 <code>winstoon</code> 三大桶达成数据对齐 <code>go/rainmaker</code> &amp; 落地 Marketplace 25% Quota Cap 口径解析</span>
+            <span class="pill pill-yellow">🎯 Rainmaker 对账与口径校准</span>
+          </div>
+          <span class="release-date">2026-10-13</span>
+        </div>
+        <div class="release-body">
+          <ul>
+            <li><strong>彻查并解决 <code>winstoon</code> (<code>Physical AI ENT Manu</code>, <code>nal_id = 2503940527</code>) 与 <code>go/rainmaker</code> 的差异</strong>：
+              <ul>
+                <li><strong>Bucket 1 (<code>GCP iRevenue</code>) 25% Marketplace Quota Cap 封顶校准</strong>：<code>winstoon</code> 名下 2026 YTD Marketplace RVP 达 <code>$5,301,085.73</code>（Gross <code>$10,315,397.57</code>），触发了 <code>go/plan2100</code> 个人 <code>GCP iRevenue</code> Quota 的 <strong>25% 封顶线</strong>（<code>25% × $4,239,923.93 = $1,059,980.98</code>），超额的 <code>$424.11 万</code> 在个人 Rainmaker 中被截断。已将看板中 <code>winstoon</code> 的 Bucket 1 实际达成从子领地未封顶分摊值 <code>$10,771,388.49</code> 精确校准为 <code>go/rainmaker</code> 官方值 <strong><code>$5,732,852.55</code>（达成率 135.21%）</strong>。</li>
+                <li><strong>Bucket 2 (<code>DA, DB &amp; Cloud AI iRevenue</code>) 剔除 3P Marketplace Anthropic</strong>：在 <code>concord-prod.service_cloudbi.customer_nir</code> 中，3P Marketplace Anthropic（<code>$5,252,912.89</code> RVP）被归入 <code>gtm_product_level_5 = 'Build with AI'</code>；而按 <code>go/plan2100</code> / <code>go/plan1003</code> 规定，FSR/CE 的 Bucket 2 仅计入 <code>FPH L1 = 'GCP'</code> 下的 1P 产品。已将 <code>winstoon</code> 的 Bucket 2 实际达成从 <code>$5,212,630.49</code> 精确校准为 <code>go/rainmaker</code> 1P 净增实绩 <strong><code>$2,077,305.17</code>（达成率 66.04%）</strong>。</li>
+              </ul>
+            </li>
+            <li><strong>同步更新 BQCA Knowledge Catalog 语义库</strong>：在 <code>bucket-1-gcp-irevenue</code> 与 <code>bucket-2-dadbai-irevenue</code> 术语定义中补充 Marketplace 50% (<code>0.5x</code>) 折算、25% Component Quota Cap 封顶及 Bucket 2 1P 产品准入规则。</li>
+          </ul>
+          <div class="impact-box">
+            <strong>涉及文件与表：</strong> <code>scripts/extract_revenue_pipeline.py</code>, <code>scripts/setup_bqca_knowledge_catalog.py</code>, <code>cliu201-477811.bhi_manu.nal_three_buckets_quota_2026</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- v1.7.0 -->
+      <div class="release-card" data-cat="calibration ui">
+        <div class="release-dot"></div>
+        <div class="release-header">
+          <div class="release-title-group">
+            <span class="ver-badge">v1.7.0</span>
+            <span class="release-title">校准 <code>fankaia</code> 三大桶最新 Rainmaker 实绩 &amp; 在 Quota 页面新增数据截止日期对比标识</span>
+            <span class="pill pill-yellow">🎯 Rainmaker 对账与口径校准</span>
+            <span class="pill pill-blue">🎨 前端交互与可视化</span>
+          </div>
+          <span class="release-date">2026-10-12</span>
+        </div>
+        <div class="release-body">
+          <ul>
+            <li><strong>校准 <code>fankaia</code> (<code>Smart Home ENT Manu</code>, <code>nal_id = 2503940524</code>) 最新 Rainmaker 数据</strong>：
+              <ul>
+                <li>因 <code>concord-prod.service_cloudbi.seller_attainment_snapshots</code> 在 10月9日～12日存在已知数据回退，原脚本锁定的 <code>2026-10-08</code> 快照滞后于实时 <code>go/rainmaker</code> 约 3 天。</li>
+                <li>已将 <code>fankaia</code> 的 Bucket 1 (<code>GCP iRevenue</code>) 从 <code>$7,117,451.06</code> 更新为 <strong><code>$7,299,440.14</code>（Quota <code>$4,610,334.00</code>，达成率 <code>158.33%</code>）</strong>；Bucket 2 (<code>DA, DB &amp; Cloud AI iRevenue</code>) 从 <code>$4,060,953.39</code> 更新为 <strong><code>$4,135,619.16</code>（Quota <code>$4,249,946.00</code>，达成率 <code>97.31%</code>）</strong>。</li>
+              </ul>
+            </li>
+            <li><strong>新增动态数据更新截止日期徽章</strong>：在 <code>/api/quota-attainment</code> 接口、主看板顶部三大桶总览横幅及 Tab 4（三大桶 Quota 达成汇总页）新增 <strong>「🕒 消费出账截止日期 (<code>2026-10-09</code>) · 对齐 Rainmaker 快照日期 (<code>2026-10-11</code>) · GE 签约截止日期 (<code>2026-10-08</code>) · 管线最后同步时间 (北京时间)」</strong>，方便日常与 <code>go/rainmaker</code> 对账。</li>
+          </ul>
+          <div class="impact-box">
+            <strong>涉及文件与表：</strong> <code>app/main.py</code>, <code>app/templates/index.html</code>, <code>scripts/extract_revenue_pipeline.py</code>, <code>cliu201-477811.bhi_manu.nal_three_buckets_quota_2026</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- v1.6.0 -->
+      <div class="release-card" data-cat="ui auth">
+        <div class="release-dot"></div>
+        <div class="release-header">
+          <div class="release-title-group">
+            <span class="ver-badge">v1.6.0</span>
+            <span class="release-title">AI Agent 输入框改为多行回车换行模式 &amp; 架构文档 <code>SDD_v1.0.md</code> 数据脱敏发布至 GitHub</span>
+            <span class="pill pill-blue">🎨 前端交互与可视化</span>
+            <span class="pill pill-green">🔐 认证与安全加固</span>
+          </div>
+          <span class="release-date">2026-10-12</span>
+        </div>
+        <div class="release-body">
+          <ul>
+            <li><strong>AI 数据分析 Agent 输入框交互优化</strong>：将 Tab 5 聊天输入框 <code>#agentInput</code> 从单行 <code>&lt;input type="text"&gt;</code> 改为多行 <code>&lt;textarea rows="3"&gt;</code>，并移除按 <code>Enter</code> 键直接触发发送的绑定。现在按回车键可在编辑框内自然换行排版复杂查询，点击右侧「发送查询 🚀」按钮才会提交。</li>
+            <li><strong><code>SDD_v1.0.md</code> 敏感业务数据全面脱敏并上传 GitHub</strong>：移除 <code>SDD_v1.0.md</code> 中所有具体美元金额、真实客户名称及内部员工 LDAP（替换为通用架构占位符如 <code>&lt;Bucket_1_Attainment_$&gt;</code>、<code>&lt;Rep_A&gt;</code>、<code>&lt;Sample_Customer&gt;</code>），并重新初始化无历史包袱的单次干净 Commit 推送至 <code>https://github.com/cliucn/manu-bhi</code>。</li>
+          </ul>
+          <div class="impact-box">
+            <strong>涉及文件：</strong> <code>app/templates/index.html</code>, <code>SDD_v1.0.md</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- v1.5.0 -->
+      <div class="release-card" data-cat="auth">
+        <div class="release-dot"></div>
+        <div class="release-header">
+          <div class="release-title-group">
+            <span class="ver-badge">v1.5.0</span>
+            <span class="release-title">GCP 项目 IAM 合规改造：移除个人账号授权，全面切换至 Cloud Run 绑定服务账号 <code>byd-sa</code></span>
+            <span class="pill pill-green">🔐 认证与安全加固</span>
+          </div>
+          <span class="release-date">2026-10-12</span>
+        </div>
+        <div class="release-body">
+          <ul>
+            <li><strong>清理个人账号 IAM 与 Dataset ACL 绑定</strong>：严格遵循公司 Argolis 项目安全合规策略，移除 <code>cliu201-477811</code> 项目级 IAM 与 <code>bhi_manu</code> BigQuery 数据集 ACL 中所有 <code>@google.com</code> 个人用户授权。</li>
+            <li><strong>统一通过绑定 Service Account <code>byd-sa@cliu201-477811.iam.gserviceaccount.com</code> 访问</strong>：为您完成该服务账号的角色最小权限收敛（<code>bigquery.admin</code>、<code>dataplex.admin</code>、<code>geminidataanalytics.dataAgentOwner</code>、<code>run.admin</code> 等），并更新 <code>app/main.py</code> 与所有 ETL 脚本默认加载 <code>byd-sa</code> 凭据访问项目内资源。</li>
+          </ul>
+          <div class="impact-box">
+            <strong>涉及文件：</strong> <code>app/main.py</code>, <code>scripts/extract_revenue_pipeline.py</code>, <code>scripts/setup_bqca_knowledge_catalog.py</code>, <code>scripts/daily_pipeline.sh</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- v1.4.0 -->
+      <div class="release-card" data-cat="auth">
+        <div class="release-dot"></div>
+        <div class="release-header">
+          <div class="release-title-group">
+            <span class="ver-badge">v1.4.0</span>
+            <span class="release-title">收紧登录访问控制：限定 4 位授权白名单用户访问</span>
+            <span class="pill pill-green">🔐 认证与安全加固</span>
+          </div>
+          <span class="release-date">2026-10-12</span>
+        </div>
+        <div class="release-body">
+          <ul>
+            <li><strong>精确邮箱白名单控制（<code>ALLOWED_USERS</code>）</strong>：在原有 <code>@google.com</code> 域名校验基础上，新增用户级精确白名单，仅允许 <code>liuchenggang@google.com</code>、<code>levichen@google.com</code>、<code>yhugo@google.com</code>、<code>xwzeng@google.com</code> 四位用户通过认证访问看板与 API，其他账号登录时返回 <code>403 Forbidden</code> 提示。</li>
+          </ul>
+          <div class="impact-box">
+            <strong>涉及文件：</strong> <code>app/main.py</code>, <code>app/templates/index.html</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- v1.3.0 -->
+      <div class="release-card" data-cat="agent">
+        <div class="release-dot"></div>
+        <div class="release-header">
+          <div class="release-title-group">
+            <span class="ver-badge">v1.3.0</span>
+            <span class="release-title">AI Agent 架构升级：接入 BigQuery Conversational Analytics (BQCA) + Knowledge Catalog 语义治理</span>
+            <span class="pill pill-purple">🤖 AI Agent 与语义治理</span>
+          </div>
+          <span class="release-date">2026-10-11</span>
+        </div>
+        <div class="release-body">
+          <ul>
+            <li><strong>升级至 Google Cloud 原生 BQCA (<code>geminidataanalytics.googleapis.com/v1beta</code>)</strong>：创建并发布受治理的持久化 Data Agent <code>projects/cliu201-477811/locations/global/dataAgents/bhi-manu-2026-agent</code>，替代早期手写 Prompt-to-SQL 循环。</li>
+            <li><strong>构建 Dataplex Knowledge Catalog 业务术语表 (<code>bhi-manu-2026-glossary</code>)</strong>：沉淀 8 项核心业务术语（RVP Revenue、Gross Revenue、三大考核桶、GE Watermark 三步对账桥、DRR、自然月 MRR），并为 <code>bhi_manu</code> 全部 11 张表、251 个字段写入中文业务语义描述与 6 组 Verified Golden SQL。</li>
+            <li><strong>前端可视化语义推理链与智能追问</strong>：支持在对话气泡中展开查看 BQCA 语义推理步骤、受治理的 BigQuery SQL、交互式数据表、一键导出 CSV 及 AI 推荐追问 Chips。</li>
+          </ul>
+          <div class="impact-box">
+            <strong>涉及文件：</strong> <code>scripts/setup_bqca_knowledge_catalog.py</code>, <code>app/main.py</code>, <code>app/templates/index.html</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- v1.2.0 -->
+      <div class="release-card" data-cat="calibration">
+        <div class="release-dot"></div>
+        <div class="release-header">
+          <div class="release-title-group">
+            <span class="ver-badge">v1.2.0</span>
+            <span class="release-title">三大考核桶与 <code>go/rainmaker</code> 深度对账校准（负向归零规则 &amp; GE Watermark 三步核对桥）</span>
+            <span class="pill pill-yellow">🎯 Rainmaker 对账与口径校准</span>
+          </div>
+          <span class="release-date">2026-10-10</span>
+        </div>
+        <div class="release-body">
+          <ul>
+            <li><strong>还原 <code>go/plan2100</code> 账户级负向归零规则（<code>ApplyAccountNegativeAttainmentToNetZeroRule</code>）</strong>：结合 <code>concord-prod.service_cloudbi.customer_nir</code> 对单账户负向 iRevenue 按 <code>$0</code> 归零（不倒扣同 NAL 下其他正向增长客户的业绩）。</li>
+            <li><strong>校准 <code>wendylv</code> 与全领地三大桶总额</strong>：将 <code>wendylv</code> (<code>Strategic Sel Manu</code>) Bucket 1 达成精确校准为 <code>$18,426,974.50</code>（Quota <code>$18,407,282.00</code>，达成率 <code>100.11%</code>）。</li>
+            <li><strong>建立 Bucket 3 (<code>Gemini Enterprise Net ACV</code>) 分毫不差的三步对账桥梁</strong>：完整展示从客户 100% 原始签约年化总额 <code>$768,127.39</code> → 剔除续约 (<code>-$4,159.62</code>) 与 Gen AI FSP 90% 折算核减 (<code>-$1,757.43</code>) 后得到水位线前净增 <code>$762,210.33</code> → 扣除 <code>fankaia</code> 月度水位线冲减 (<code>-$49,181.03</code>) 后精确等于 <code>go/rainmaker</code> 官方认账达成 <strong><code>$713,029.30</code></strong>。</li>
+          </ul>
+          <div class="impact-box">
+            <strong>涉及文件：</strong> <code>scripts/extract_revenue_pipeline.py</code>, <code>app/templates/index.html</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- v1.1.0 -->
+      <div class="release-card" data-cat="ui calibration">
+        <div class="release-dot"></div>
+        <div class="release-header">
+          <div class="release-title-group">
+            <span class="ver-badge">v1.1.0</span>
+            <span class="release-title">新增 Tab 3 (GE 签约专区) &amp; Tab 4 (三大桶 Quota 达成汇总) &amp; 每日 03:00 自动同步管线</span>
+            <span class="pill pill-blue">🎨 前端交互与可视化</span>
+          </div>
+          <span class="release-date">2026-10-09</span>
+        </div>
+        <div class="release-body">
+          <ul>
+            <li><strong>上线 Tab 3（Gemini Enterprise 签约专区）</strong>：对接 <code>concord-prod.service_cloudbi.internal_udl_bookings</code>，按签约年化净增额（Signed Net ACV）独立展示全领地 GE 订单、座位规模与客户明细。</li>
+            <li><strong>上线 Tab 4（NAL 与整体三大桶 Quota 达成汇总）</strong>：同屏对比 12 个 Street-Level NAL 在 Bucket 1 (<code>GCP iRevenue</code>)、Bucket 2 (<code>DA, DB &amp; Cloud AI iRevenue</code>)、Bucket 3 (<code>Gemini Enterprise Net ACV</code>) 的基线、Quota、实际达成与进度条。</li>
+            <li><strong>配置每日凌晨 03:00（北京时间）定时同步任务</strong>：新增 <code>scripts/daily_pipeline.sh</code> 并注册 Crontab 每日自动刷新数据与语义库。</li>
+          </ul>
+          <div class="impact-box">
+            <strong>涉及文件：</strong> <code>scripts/extract_revenue_pipeline.py</code>, <code>scripts/daily_pipeline.sh</code>, <code>app/main.py</code>, <code>app/templates/index.html</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- v1.0.0 -->
+      <div class="release-card" data-cat="ui">
+        <div class="release-dot"></div>
+        <div class="release-header">
+          <div class="release-title-group">
+            <span class="ver-badge">v1.0.0</span>
+            <span class="release-title">BHI Manufacturing 2026 收入与 Run Rate 看板初始版本上线</span>
+            <span class="pill pill-blue">🎨 前端交互与可视化</span>
+          </div>
+          <span class="release-date">2026-10-08</span>
+        </div>
+        <div class="release-body">
+          <ul>
+            <li><strong>构建跨项目 ETL 数据管线</strong>：从 <code>concord-prod.service_cloudbi_reporting.revenue_daily</code> 抽取大中华区制造行业（MANU）12 个 NAL、238 家重点客户的日度 DRR、自然月 MRR 与产品线明细至 <code>cliu201-477811.bhi_manu</code>。</li>
+            <li><strong>上线双视角消费看板（Tab 1 RVP 销售认账视图 &amp; Tab 2 Gross 毛消费视图）</strong>：支持按 NAL 筛选、客户趋势下钻、全量客户记分卡排序搜索及一键导出 CSV，并部署至 Google Cloud Run (<code>us-central1</code>)。</li>
+          </ul>
+          <div class="impact-box">
+            <strong>涉及文件：</strong> <code>scripts/extract_revenue_pipeline.py</code>, <code>app/main.py</code>, <code>app/templates/index.html</code>, <code>app/Dockerfile</code>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+  </div><!-- /#appProtectedShell -->
+
+  <script>
+    var IDT = '';
+    var currentCategory = 'all';
+
+    function showGate(msg) {
+      document.title = 'Google SSO 安全认证';
+      var shell = document.getElementById('appProtectedShell');
+      if (shell) shell.style.display = 'none';
+      var g = document.getElementById('gate');
+      g.style.display = 'flex';
+      if (msg) document.getElementById('gateMsg').textContent = msg;
+    }
+    function hideGate() {
+      document.title = '版本更新日志 (Release Notes) · BHI Manufacturing 2026 收入与 Quota 看板';
+      document.getElementById('gate').style.display = 'none';
+      var shell = document.getElementById('appProtectedShell');
+      if (shell) shell.style.display = 'block';
+    }
+
+    function syncAdminLink(email, isAdmin) {
+      var clean = (email || '').trim().toLowerCase();
+      var existing = document.getElementById('adminAuditLink');
+      if (isAdmin || clean === 'liuchenggang@google.com') {
+        if (!existing) {
+          var profileBar = document.querySelector('.user-profile');
+          if (profileBar) {
+            var a = document.createElement('a');
+            a.id = 'adminAuditLink';
+            a.href = '/admin-audit';
+            a.style.cssText = 'display:inline-flex; align-items:center; gap:5px; background:#f3e8fd; color:#681da8; border:1px solid #d7aefb; padding:5px 12px; border-radius:16px; font-size:12px; font-weight:600; text-decoration:none; transition:all 0.15s ease;';
+            a.title = '管理员专属隐藏页面：查看过去一个月用户访问统计与安全审计日志';
+            a.textContent = '🛡️ 访问统计 (Admin)';
+            profileBar.insertBefore(a, profileBar.firstChild);
+          }
+        }
+      } else if (existing && existing.parentNode) {
+        existing.parentNode.removeChild(existing);
+      }
+    }
+
+    async function logout() {
+      IDT = '';
+      sessionStorage.removeItem('id_token');
+      try {
+        await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+      } catch (e) {}
+      if (window.google && google.accounts && google.accounts.id) {
+        google.accounts.id.disableAutoSelect();
+      }
+      var ttlBadge = document.getElementById('sessionTtlBadge');
+      if (ttlBadge) ttlBadge.style.display = 'none';
+      showGate('您已安全退出长效会话，请重新登录');
+    }
+
+    async function initAuth() {
+      var saved = sessionStorage.getItem('id_token');
+      if (saved) { IDT = saved; }
+
+      var cfg = await (await fetch('/authconfig', { credentials: 'same-origin' })).json();
+      if (!cfg.app_auth) {
+        hideGate();
+        document.getElementById('userEmail').textContent = 'Auth Disabled (Local)';
+        return;
+      }
+      if (!cfg.client_id) {
+        return showGate('管理员尚未配置 OAUTH_CLIENT_ID');
+      }
+
+      var boot = function() {
+        google.accounts.id.initialize({
+          client_id: cfg.client_id,
+          ux_mode: 'popup',
+          callback: function(resp) {
+            setTimeout(async function() {
+              try {
+                var r = await fetch('/api/auth/session', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'same-origin',
+                  body: JSON.stringify({ credential: resp.credential })
+                });
+                if (r.status === 403) {
+                  showGate('拒绝访问：当前账号未获得访问授权，请联系系统管理员开通权限');
+                  return;
+                }
+                if (!r.ok) {
+                  showGate('登录换票失败，请重试');
+                  return;
+                }
+                var data = await r.json();
+                IDT = data.session_token || resp.credential;
+                sessionStorage.setItem('id_token', IDT);
+                document.getElementById('userEmail').textContent = data.email || '';
+                syncAdminLink(data.email, data.is_admin);
+                var ttlBadge = document.getElementById('sessionTtlBadge');
+                if (ttlBadge) {
+                  var days = Math.round((data.expires_in || 604800) / 86400);
+                  ttlBadge.textContent = '🔒 ' + days + '天长效免登';
+                  ttlBadge.style.display = 'inline-block';
+                }
+                hideGate();
+              } catch (err) {
+                showGate('登录验证异常，请重试');
+              }
+            }, 80);
+          }
+        });
+        google.accounts.id.renderButton(document.getElementById('gbtn'), {
+          theme: 'outline',
+          size: 'large',
+          text: 'signin_with',
+          shape: 'rectangular'
+        });
+      };
+
+      if (window.google && google.accounts) { boot(); }
+      else {
+        var t = setInterval(function() {
+          if (window.google && google.accounts) {
+            clearInterval(t);
+            boot();
+          }
+        }, 200);
+      }
+
+      try {
+        var headers = {};
+        if (IDT) headers['Authorization'] = 'Bearer ' + IDT;
+        var who = await fetch('/api/whoami', { credentials: 'same-origin', headers: headers });
+        if (who.ok) {
+          var wdata = await who.json();
+          var renewedToken = who.headers.get('x-session-token');
+          if (renewedToken) {
+            IDT = renewedToken;
+            sessionStorage.setItem('id_token', IDT);
+          }
+          document.getElementById('userEmail').textContent = wdata.user || '';
+          syncAdminLink(wdata.user, wdata.is_admin);
+          var ttlBadge = document.getElementById('sessionTtlBadge');
+          if (ttlBadge && wdata.remaining_seconds) {
+            var remDays = (wdata.remaining_seconds / 86400).toFixed(1);
+            ttlBadge.textContent = '🔒 长效会话 (余 ' + remDays + ' 天)';
+            ttlBadge.style.display = 'inline-block';
+          }
+          hideGate();
+          return;
+        }
+      } catch (e) {}
+
+      IDT = '';
+      sessionStorage.removeItem('id_token');
+      showGate();
+    }
+
+    function filterReleases(cat, btn) {
+      currentCategory = cat;
+      var chips = document.querySelectorAll('.filter-chips .chip');
+      chips.forEach(function(c) { c.classList.remove('active'); });
+      if (btn) btn.classList.add('active');
+      applyReleaseFilters();
+    }
+
+    function searchReleases() {
+      applyReleaseFilters();
+    }
+
+    function applyReleaseFilters() {
+      var q = (document.getElementById('rnSearch').value || '').trim().toLowerCase();
+      var cards = document.querySelectorAll('.release-card');
+      cards.forEach(function(card) {
+        var cats = (card.getAttribute('data-cat') || '').split(/\s+/);
+        var catMatch = (currentCategory === 'all') || (cats.indexOf(currentCategory) !== -1);
+        var textMatch = !q || (card.innerText.toLowerCase().indexOf(q) !== -1);
+        card.style.display = (catMatch && textMatch) ? 'block' : 'none';
+      });
+    }
+
+    window.addEventListener('DOMContentLoaded', initAuth);
+  </script>
+</body>
+</html>

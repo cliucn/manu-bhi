@@ -1,7 +1,7 @@
-# 软件设计说明书 (SDD v1.9)：2026 行业线收入、RunRate 与三大桶 Quota 达成门户（含 BQCA + Knowledge Catalog 智能分析引擎 & 无状态长效认证）
+# 软件设计说明书 (SDD v1.12)：2026 行业线收入、RunRate 与三大桶 Quota 达成门户（含 BQCA + Knowledge Catalog 智能分析引擎、GCP Project 级细粒度 MRR/DRR 曲线、无状态长效认证 & 四级缓存加速架构）
 
-- **文档版本**：`v1.9 (Production Release)`
-- **更新日期**：`2026-10-13`
+- **文档版本**：`v1.12 (Production Release)`
+- **更新日期**：`2026-10-15`
 - **适用范围**：`Google Cloud 区域与行业线 (BHI / Manufacturing 等领地可通用复用)`
 - **目标 GCP 项目与数据集**：`<YOUR_PROJECT_ID>.<YOUR_DATASET>`（示例：`bhi_manu`）
 - **BQCA Data Agent 资源**：`projects/<YOUR_PROJECT_ID>/locations/global/dataAgents/bhi-manu-2026-agent`
@@ -14,21 +14,22 @@
 
 ### 1.1 业务痛点
 在 Google Cloud 区域与行业线的日常经营分析中，销售负责人与 Customer Engineer (CE) 面临以下核心痛点：
-1. **多源口径割裂**：日常消费出账数据位于 `concord-prod.service_cloudbi_reporting.revenue_daily`，而三大考核桶 Quota、去年同期基线（PY Baseline）、账户级负向归零（NIR Floor）以及 Gemini Enterprise (GE) 合同签约（Bookings Net ACV）分散在 `concord-prod.service_cloudbi` 的多张视图中。
+1. **多源口径割裂**：日常消费出账数据位于 `concord-prod.service_cloudbi_reporting.revenue_daily` 与项目级 `revenue_project_sku_daily`，而三大考核桶 Quota、去年同期基线（PY Baseline）、账户级负向归零（NIR Floor）以及 Gemini Enterprise (GE) 合同签约（Bookings Net ACV）分散在 `concord-prod.service_cloudbi` 的多张视图中。
 2. **RVP 认账、Gross 毛消费与 Marketplace 封顶规则复杂**：销售考核以含激励折算的 **RVP Revenue** 为准（其中 3P Marketplace 按 50% 折算），且在 Bucket 1 中受 **25% Marketplace Quota Cap** 限制，在 Bucket 2 中仅计入 **1P 自研产品**（剔除 3P Marketplace AI 订阅），直接裸查明细表极易与 `go/rainmaker` 产生偏差。
 3. **GE 签约水位线（Monthly Watermark）对账困难**：Gemini Enterprise 采用签约净增年化合同额（`NETACV_MONTHLY`）考核，从客户 100% 原始签约额到 `go/rainmaker` 最终认账达成之间涉及续约剔除、`Gen AI FSP` 10% 权重折算以及历史最高水位线冲减三步核算。
 4. **隐私与组织安全合规要求**：
    - 直接查询个人级薪酬快照表会涉及个人敏感薪酬信息（PII / Compensation），需要构建一套**100% 领地级（Territory）与街区级（Street-Level NAL）脱敏汇总架构**，不存储任何个人薪酬字段；
    - 遵循 Argolis 组织安全策略（Domain Restricted Sharing），项目 IAM 严禁直接绑定跨域名个人邮箱账号，需统一由 Cloud Run 绑定的专用 Service Account 代理访问后端资源；
    - 原生 Google Identity Services (GIS) OIDC `id_token` 固定 1 小时（3600 秒）硬性过期，导致业务人员看看板时每小时频繁掉线重登。
-5. **长尾查询响应慢**：固定报表难以覆盖临时的跨表组合查询（如“高 DA/DB/AI 消费但未签 GE 的空白商机客户”、“近期单日 RunRate 相比上月日均跌幅最大的预警客户”），传统 LLM 裸写 SQL 容易搞错内部考核口径。
+5. **长尾与 Project 级细粒度曲线查询响应慢**：固定报表难以覆盖临时的跨表组合查询或基于单个 **GCP Project ID (`project_id`)** 的月度 MRR 与每日 DRR 趋势曲线下钻（如查询 `vivocloudai`、`oppo-gcp-prod-159055` 或 `ai-mify-pt-1` 的爬坡与掉量走势），传统 LLM 裸写 SQL 容易搞错内部考核口径且缺乏自动曲线可视化能力。
 
 ### 1.2 核心设计目标
 - **口径 100% 对齐 `go/plan2100` 与 `go/rainmaker`**：自动完成 Bucket 1 (`GCP iRevenue`)、Bucket 2 (`DA, DB & Cloud AI iRevenue`)、Bucket 3 (`Gemini Enterprise Net ACV`) 的领地级与各 Street-Level NAL 级精确对账（含账户级负向归零、Marketplace 25% Quota Cap、Bucket 2 1P-Only 过滤及对账截止日期显式标注）。
-- **无状态长效 Session（7天有效）+ 滑动自动续期访问控制**：将 Google 1 小时 `id_token` 换发为应用自签名的 7 天无状态 `HS256` `HttpOnly` Session Cookie，剩余有效期低于 50% 时自动滑动续期，支持多组织通配域名（`google.com`, `*.altostrat.com`）与精准用户白名单（`ALLOWED_USERS`），且兼容 Cloud Run Scale-to-Zero。
-- **双层汇总与双层级每日 RunRate 曲线下钻**：同时提供 **NAL 级（第一层，业务组汇总）** 与 **Account 级（第二层，客户明细）** 的汇总表及每日 **单日 RunRate (DRR)** 走势曲线，点击表格第一列即可联动切换曲线。
-- **BQCA + Knowledge Catalog 语义治理长尾分析**：基于 Google Cloud 原生 **BigQuery Conversational Analytics (`geminidataanalytics.googleapis.com/v1beta`)** 与 **Knowledge Catalog (`dataplex.googleapis.com/v1`)**，将 11 张表 / 251 列语义描述、8 项官方业务术语及 6 组黄金验证 SQL 注入受治理的 Data Agent，实现零幻觉、可溯源的 Text-to-SQL 对话分析。
-- **全量变更可审计（Release Notes）与一键复制重现**：内置独立版本更新日志页面（`/releasenotes`），其他行业线或区域团队仅需修改项目配置与领地 NAL 范围，即可在 15 分钟内完整克隆部署。
+- **无状态长效 Session（7天有效）+ 滑动自动续期访问控制 + 未登录前零信息暴露**：将 Google 1 小时 `id_token` 换发为应用自签名的 7 天无状态 `HS256` `HttpOnly` Session Cookie，剩余有效期低于 50% 时自动滑动续期；未通过登录验证前服务端仅下发 3.4 KB 零业务信息登录壳页面（Zero Pre-Login Information Exposure），不暴露任何业务 DOM、指标名称或白名单账号。
+- **前后端四级缓存加速架构（0ms 刷新秒开 + 5 步动态进度条）**：结合浏览器 `localStorage` 全量快照缓存（L1，6 小时 TTL + SWR 静默版本比对）、`sessionStorage` 每日 DRR 趋势曲线缓存（L2，切换 RVP/Gross 视图 `0ms` 重绘）、后端多线程并发查询与 1 小时内存缓存（L3）以及顶栏一键强制穿透刷新按钮（L4），彻底消除每次刷新重复查询 BigQuery 的等待；首次冷加载时展示 5 步实时数据计算进度条，避免加载期间出现 `$0` 占位符。
+- **三层汇总与三层级每日 RunRate 曲线下钻（NAL 级 + Account 级 + GCP Project ID 级）**：同时提供 **NAL 级（第一层，业务组汇总）**、**Account 级（第二层，客户明细）** 以及 **GCP Project ID 级（第三层，细粒度项目工作台）** 的月度 MRR 与每日 **单日 RunRate (DRR)** 走势曲线。
+- **BQCA + Knowledge Catalog 语义治理长尾分析 + 对话气泡内自动曲线渲染**：基于 Google Cloud 原生 **BigQuery Conversational Analytics (`geminidataanalytics.googleapis.com/v1beta`)** 与 **Knowledge Catalog (`dataplex.googleapis.com/v1`)**，将 14 张表 / 374 列语义描述、9 项官方业务术语及 9 组黄金验证 SQL 注入受治理的 Data Agent，并在前端实现 **时序结果集自动检测与 Chart.js 交互式折线/柱状图内嵌渲染**。
+- **全量变更可审计（Release Notes）与一键复制重现**：内置独立版本更新日志页面（`/releasenotes`，记录 `v1.0.0` 至 `v1.12.0` 完整变更），其他行业线或区域团队仅需修改项目配置与领地 NAL 范围，即可在 15 分钟内完整克隆部署。
 
 ---
 
@@ -52,9 +53,9 @@ flowchart TB
 
     subgraph DW["3. 目标分析仓与语义治理层 (Target Project · 零跨域名个人 IAM 绑定)"]
         SA["Cloud Run 绑定服务账号<br/>(代表业务负责人访问项目内全部资源)"]
-        BQ[("BigQuery Dataset: bhi_manu<br/>11 张核心分析表 · 251 个语义字段")]
-        KC["Knowledge Catalog (Dataplex Universal Catalog)<br/>Glossary: bhi-manu-2026-glossary (8 项标准术语)"]
-        CA["BQCA Data Agent (geminidataanalytics v1beta)<br/>bhi-manu-2026-agent (含 6 组黄金验证 SQL)"]
+        BQ[("BigQuery Dataset: bhi_manu<br/>14 张核心分析表 · 374 个语义字段")]
+        KC["Knowledge Catalog (Dataplex Universal Catalog)<br/>Glossary: bhi-manu-2026-glossary (9 项标准术语)"]
+        CA["BQCA Data Agent (geminidataanalytics v1beta)<br/>bhi-manu-2026-agent (含 9 组黄金验证 SQL)"]
         SA --> BQ
         SA --> KC
         SA --> CA
@@ -82,8 +83,8 @@ flowchart TB
 
 ```text
 manu-bhi/
-├── SDD_cn.md                                # 中文版软件设计说明书 (Current Version: v1.9)
-├── SDD_en.md                                # 英文版软件设计说明书 (English Edition for Global Teams: v1.9)
+├── SDD_cn.md                                # 中文版软件设计说明书 (Current Version: v1.11)
+├── SDD_en.md                                # 英文版软件设计说明书 (English Edition for Global Teams: v1.11)
 ├── skills/
 │   ├── cloudrun-session-domain-auth/
 │   │   └── SKILL.md                         # Cloud Run 无状态长效 Session (7~30天) + 滑动自动续期认证 Skill 规范
@@ -95,10 +96,10 @@ manu-bhi/
 ├── app/
 │   ├── Dockerfile                           # Cloud Run 容器镜像构建文件 (Python 3.12-slim + uvicorn)
 │   ├── requirements.txt                     # Web 后端 Python 依赖清单 (含 FastAPI, PyJWT, google-auth, BigQuery)
-│   ├── main.py                              # FastAPI 后端服务（含 7天无状态 Session 鉴权、滑动续期、报表 API、BQCA 网关）
+│   ├── main.py                              # FastAPI 后端服务（含 7天无状态 Session 鉴权、四级缓存 API、并发查询、BQCA 网关）
 │   └── templates/
-│       ├── index.html                       # 16:9 宽屏主看板（双层 DRR 曲线 + 双向固定表格 + 对账截止日期横幅 + 多行 BQCA 对话框）
-│       └── releasenotes.html                # 独立版本更新日志页面（记录 v1.0.0 至 v1.9.0 历次版本演进，支持分类筛选与搜索）
+│       ├── index.html                       # 16:9 宽屏主看板（localStorage 0ms 秒开缓存 + 5步加载进度条 + 双层 DRR 曲线 + BQCA 对话框）
+│       └── releasenotes.html                # 独立版本更新日志页面（记录 v1.0.0 至 v1.11.0 历次版本演进，支持分类筛选与搜索）
 └── logs/
     └── cron.log                             # 每日定时任务执行日志
 ```
@@ -142,6 +143,7 @@ manu-bhi/
 2. **Bucket 2: DA, DB & Cloud AI iRevenue (数据与 AI 增量收入)**
    - **产品范围 (`service_cloudbi.nal_reporting`)**：`product IN ('ANALYTICS', 'LOOKER', 'MIGRATE_AND_MODERNIZE_DATABASES', 'AI_SOLUTIONS', 'DEVELOPER_AI_ASSISTANCE')`。
    - **1P 自研产品限定规则（剔除 3P Marketplace）**：虽然 `customer_nir` 中部分第三方 Marketplace 模型订阅会被打上 `gtm_product_level_5 = 'Build with AI'` 标签，但根据 `go/plan2100` 规范，Bucket 2 仅统计 Google **1P 原生数据与 AI 产品**（`fph_product_level_2 IN ('Vertex AI', 'Cloud AI', 'Data Analytics', 'Looker', 'Databases')`），所有 `fph_product_level_2 = 'Cloud Marketplace'` 的 3P 消费均不计入 Bucket 2 达成。
+   - **子领地先锁后分摊规则（Sub-Pod Lock-Before-Allocate Rule）**：在将 Sub-Pod 聚合实绩（如 Sub-Pod 1 / Sub-Pod 2）向 Street-Level NAL 分摊时，必须**先锁定并扣除已确认存在 25% Marketplace Cap 截断或 1P 独立核定的代表精确值**，再将子领地剩余的 1P 净增实绩按 `customer_nir` 1P 权重分配给同组其余 NAL，严禁先按含 3P 的原始权重分摊后再单方面下调某代表数值（否则会导致其余 NAL 的合法 1P 实绩被吞没）。同时自动同步 Q4 领地 Quota 调整（如 Manu Cluster 全领地 Bucket 1 iRev Quota 为 `$78,952,908.00`、实绩 `$73,719,191.25 / 93.37%`；Bucket 2 iRev Quota 为 `$51,653,090.00`、实绩 `$41,668,607.68 / 80.67%`）。
 3. **Bucket 3: Gemini Enterprise Net ACV (签约净增年化合同额)**
    - **数据源**：`concord-prod.service_cloudbi.bookings`（**不加 T-2 延迟过滤**，实时同步截至当日的最新已签合同）与 `nal_reporting` (`product = 'AGENTSPACE'`)。
    - **三步对账桥梁（Three-Step Reconciliation Bridge）**：
@@ -155,7 +157,7 @@ manu-bhi/
 
 ---
 
-## 5. 目标数据仓模型设计 (`<YOUR_PROJECT_ID>.bhi_manu` 11 张表)
+## 5. 目标数据仓模型设计 (`<YOUR_PROJECT_ID>.bhi_manu` 14 张表)
 
 | 序号 | 表名 (Table ID) | 粒度 (Grain) | 核心用途与对应前端视图 |
 | :---: | :--- | :--- | :--- |
@@ -170,6 +172,9 @@ manu-bhi/
 | 9 | `territory_quarterly_quota_2026` | `quarter × product` | Q1–Q4 分季度、分考核产品线的基线、Quota 与实绩明细（Tab 4 第三部分） |
 | 10 | `customer_product_revenue_daily` | `reporting_id × usage_date × fph_l3` | 细粒度客户每日产品子项消费明细，供深度下钻查询 |
 | 11 | `customer_ge_details_2026` | `reporting_id × fph_l5` | 账单侧 GE 相关子产品出账明细 |
+| 12 | `project_revenue_scorecard_2026` | `project_id × billing_account_id` | **GCP Project 级计分卡**：覆盖全领地 5,414 个 Project 的 YTD 收入、9月/10月 MRR、最新单日 DRR 与 7 日均值（Tab 5 工作台 & BQCA） |
+| 13 | `project_monthly_revenue` | `project_id × year_month` | **GCP Project 级自然月 MRR 表**：全部 5,414 个 Project 在 2026-01 至 2026-10 的月度 MRR 与日均 DRR 走势曲线 |
+| 14 | `project_daily_runrate` | `project_id × usage_date` | **GCP Project 级每日 DRR 曲线表**：按 `usage_date` 分区、`project_id` 聚簇，记录活跃 Project 的每日 DRR 曲线与 7 日移动均线 |
 
 ---
 
@@ -193,15 +198,15 @@ sequenceDiagram
     Q-->>B: 返回结构化查询结果集 (data.result)
     B-->>B: 生成中文 Markdown 总结 (FINAL_RESPONSE) 与推荐追问 (FOLLOWUP_QUESTIONS)
     B-->>F: 返回流式 Message Chunks 数组
-    F-->>U: 返回 {thoughts, answer, sql_queries, followup_questions}
+    F-->>U: 返回 {thoughts, answer, sql_queries, followup_questions} (含时序结果自动曲线渲染)
 ```
 
 ### 6.1 第一层：BigQuery 表与列级语义元数据自动同步
-- `update_bigquery_knowledge_catalog_metadata()` 遍历 `bhi_manu` 下全部 11 张表，通过 `bq_client.update_table(table, ["description", "labels", "schema"])` 写入每张表的业务定位与全部 **251 个列**的中英文口径说明。
+- `update_bigquery_knowledge_catalog_metadata()` 遍历 `bhi_manu` 下全部 14 张表，通过 `bq_client.update_table(table, ["description", "labels", "schema"])` 写入每张表的业务定位与全部 **374 个列**的中英文口径说明。
 - BigQuery 自动将这些元数据同步至 **Dataplex Universal Catalog (Knowledge Catalog)** 的 `@bigquery` 资产条目中，并在每日 `extract_revenue_pipeline.py` 跑批结束时自动重刷，确保 `WRITE_TRUNCATE` 不会丢失字段注释。
 
 ### 6.2 第二层：Knowledge Catalog 受治理业务术语表 (`bhi-manu-2026-glossary`)
-- 通过 Dataplex API (`https://dataplex.googleapis.com/v1/projects/<YOUR_PROJECT_ID>/locations/global/glossaries/bhi-manu-2026-glossary`) 注册了 8 个标准业务术语词条（含中英文同义词标签）：
+- 通过 Dataplex API (`https://dataplex.googleapis.com/v1/projects/<YOUR_PROJECT_ID>/locations/global/glossaries/bhi-manu-2026-glossary`) 注册了 9 个标准业务术语词条（含中英文同义词标签）：
   - `rvp-revenue` (`RVP Revenue (销售认账收入)`)
   - `gross-revenue` (`Gross Revenue (毛消费出账收入)`)
   - `bucket-1-gcp-irevenue` (`Bucket 1: GCP iRevenue`)
@@ -210,13 +215,14 @@ sequenceDiagram
   - `ge-watermark-reconciliation` (`GE Watermark Reconciliation 对账桥`)
   - `daily-run-rate-drr` (`Daily Run Rate (DRR, 单日 RunRate)`)
   - `monthly-run-rate-mrr` (`Monthly Run Rate (MRR, 自然月累计 RunRate)`)
+  - `gcp-project-billing-grain` (`GCP Project ID & Billing Account Grain (Project 级细粒度 MRR/DRR 曲线)`)
 
 ### 6.3 第三层：BQCA Data Agent (`bhi-manu-2026-agent`) 上下文配置
 - 通过 `https://geminidataanalytics.googleapis.com/v1beta/projects/<YOUR_PROJECT_ID>/locations/global/dataAgents/bhi-manu-2026-agent` 发布 `publishedContext`，包含：
-  - `datasourceReferences.bq.tableReferences`：绑定核心表及 `schema.fields`、`synonyms`、`tags`；
-  - `glossaryTerms`：内嵌 8 项标准术语；
-  - `exampleQueries`：6 组经过人工核验的黄金 SQL 问答对（Verified Queries）；
-  - `systemInstruction`：规范中文 Markdown 输出格式、默认 RVP 口径及三大桶对账规则。
+  - `datasourceReferences.bq.tableReferences`：绑定 12 张核心查询表（含 `project_revenue_scorecard_2026`、`project_monthly_revenue`、`project_daily_runrate`）及 `schema.fields`、`synonyms`、`tags`；
+  - `glossaryTerms`：内嵌 9 项标准术语；
+  - `exampleQueries`：9 组经过人工核验的黄金 SQL 问答对（Verified Queries，含按 `project_id` 查询月度 MRR 与每日 DRR 曲线）；
+  - `systemInstruction`：规范中文 Markdown 输出格式、默认 RVP 口径、三大桶对账规则及 Project 级时序曲线查询约定。
 
 ---
 
@@ -255,37 +261,52 @@ sequenceDiagram
   1. **自定义分号 Cookie 解析器 (`extract_cookie_token`)**：GIS SDK 会在同域下写入包含花括号与双引号的 `g_state={"i_l":0}` Cookie，会导致 Python 标准库 `http.cookies.SimpleCookie`（进而影响 `request.cookies`）解析中断并丢失其后的 Session Cookie；后端直接按 `;` 拆分原始 `Cookie` 请求头安全提取 `argolis_app_session`。
   2. **COOP 响应头与 Popup 模式**：所有页面响应头显式设置 `cross-origin-opener-policy: same-origin-allow-popups`，前端 GIS 初始化固定采用 `ux_mode: 'popup'` 并配合 `setTimeout(..., 80)` 渲染按钮，避免 Google 弹窗 `postMessage` 被浏览器拦截。
   3. **Scale-to-Zero 与多实例无状态兼容**：所有会话声明（`sub`, `email`, `name`, `iat`, `exp`, `type`）经环境变量 `SESSION_SECRET` 进行 `HMAC-SHA256` 签名存储在客户端 `HttpOnly` Cookie 中，容器缩容至 0 或多实例水平扩容均不会丢失登录状态。
+  4. **未登录前零信息暴露（Zero Pre-Login Information Exposure）**：当未持有有效 `argolis_app_session` Cookie 的请求访问 `/` 或 `/releasenotes` 时，服务端直接返回仅 `3.4 KB` 的纯净登录网关壳（`_get_unauth_login_html`），且受保护前端 DOM 树包裹在默认隐藏的 `#appProtectedShell { display: none }` 中，确保未通过认证前不泄露任何业务指标名称、客户数据或白名单账号。
 
-### 7.2 后端 API 路由契约 (`app/main.py`)
-所有 `/api/*` 业务接口均受 `Depends(require_session)` 保护（支持 `HttpOnly` 长效 Session Cookie、网关头及 Bearer Token，并实时复核 `ALLOWED_DOMAINS` 与 `ALLOWED_USERS` 白名单）：
+### 7.2 后端 API 路由契约与四级缓存加速架构 (`app/main.py`)
+所有 `/api/*` 业务接口均受 `Depends(require_session)` 保护，并结合 **前后端四级缓存架构（L1 `localStorage` 6h 快照 + L2 `sessionStorage` DRR 趋势缓存 + L3 后端 `ThreadPoolExecutor(max_workers=8)` 与 1 小时 `_DATA_CACHE` + L4 一键强制穿透刷新）**：
 
-| HTTP 方法与路径 | 功能说明 | 核心底层表 / 服务 |
+| HTTP 方法与路径 | 功能说明 | 核心底层表 / 缓存策略 |
 | :--- | :--- | :--- |
-| `GET /` | 返回主看板 HTML 页面（带 `COOP: same-origin-allow-popups` 响应头） | `app/templates/index.html` |
-| `GET /releasenotes` | 返回独立版本更新日志 HTML 页面（记录 `v1.0.0` → `v1.9.0` 完整变更） | `app/templates/releasenotes.html` |
-| `GET /authconfig` | 返回前端 GIS 登录所需的 `client_id`、`allowed_domains` 与 `session_ttl_seconds` | 环境变量配置 |
+| `GET /` | 返回主看板 HTML（未登录返回 3.4 KB 纯净登录壳；含 `COOP: same-origin-allow-popups`） | `app/templates/index.html` |
+| `GET /releasenotes` | 返回独立版本更新日志 HTML 页面（记录 `v1.0.0` → `v1.11.0` 完整变更） | `app/templates/releasenotes.html` |
+| `GET /authconfig` | 返回前端 GIS 登录所需的 `client_id` 与 `session_ttl_seconds`（不暴露白名单信息） | 环境变量配置 |
 | `POST /api/auth/session` | 验证前端提交的 1 小时 Google `id_token`，签发 7 天 `HttpOnly` Session Cookie | `google.oauth2.id_token` + `PyJWT` |
 | `GET /api/whoami` | 校验当前长效 Session 状态（若剩余有效期 `< 50%` 自动滑动续期） | `require_session` |
-| `POST /api/auth/logout` | 清除 `argolis_app_session` Cookie 并退出登录 | Cookie 销毁 |
-| `GET /api/dashboard-data` | 返回全领地三大考核桶汇总、KPI 卡片、NAL 计分卡、月度趋势与客户明细 | `bhi_manu` 核心分析表 |
-| `GET /api/nal-trend?nal_name=...` | 返回指定 NAL（或全领地 `ALL`）2026 每日单日 RunRate (DRR) 序列（GCP/AI/DA/DB 双口径） | `customer_daily_runrate` |
-| `GET /api/customer-trend?reporting_id=...` | 返回指定客户 2026 每日单日 RunRate (DRR) 序列与 7 日移动平均线 | `customer_daily_runrate` |
+| `POST /api/auth/logout` | 清除 `argolis_app_session` Cookie 并清空浏览器端本地缓存快照 | Cookie & Cache 销毁 |
+| `GET /api/overview` | 返回全领地 YTD RVP/Gross KPI、最新单日 DRR 与当月/上月 MRR（支持 `?refresh=1`） | `_DATA_CACHE["overview"]` (1h TTL) + 前端 `localStorage` |
+| `GET /api/quota-attainment` | 返回 12 个 NAL 三大桶 Quota 达成对账、分季度 Quota 与对账截止时间元数据 | `_DATA_CACHE["quota_attainment"]` (1h TTL) + 前端 `localStorage` |
+| `GET /api/scorecard` | 并行查询并返回 12 个 NAL 汇总计分卡与 238 家重点客户明细计分卡 | `_DATA_CACHE["scorecard"]` (1h TTL) + 前端 `localStorage` |
+| `GET /api/monthly` | 返回 2026 各自然月 MRR 与产品支柱趋势 | `_DATA_CACHE["monthly"]` (1h TTL) + 前端 `localStorage` |
+| `GET /api/ge-stats` | 并行查询并返回 GE 客户订单明细、NAL 汇总与月度签约走势 | `_DATA_CACHE["ge_stats"]` (1h TTL) + 前端 `localStorage` |
+| `GET /api/nal-trend?nal_name=...` | 返回指定 NAL（或全领地 `ALL`）2026 每日单日 RunRate (DRR) 序列（同时含 RVP 与 Gross） | `_DATA_CACHE["nal_trend:*"]` (1h TTL) + 前端 `_nalTrendCache` |
+| `GET /api/customer-trend?reporting_id=...` | 返回指定客户 2026 每日单日 RunRate (DRR) 序列（同时含 RVP 与 Gross） | `_DATA_CACHE["cust_trend:*"]` (1h TTL) + 前端 `_custTrendCache` |
+| `GET /api/projects/top` | 返回 Top GCP Projects 列表（含 YTD RVP/Gross、9月/10月 MRR、最新单日 DRR）与全领地项目汇总统计 | `_DATA_CACHE["projects_top:*"]` (1h TTL) |
+| `GET /api/project-trend?project_id=...` | 返回任意 `project_id` / `project_number` 的计分卡元数据、2026 自然月度 MRR 序列与 2026 每日 DRR 曲线序列 | `_DATA_CACHE["proj_trend:*"]` (1h TTL) + 前端 `_projTrendLocalCache` |
+| `GET /api/cache/status` | 轻量级（`<5ms`）返回当前后端缓存状态与 BigQuery 表最后修改时间，供前端 SWR 静默比对 | 内存元数据直读 |
+| `POST /api/cache/clear` | 一键清空后端全部内存缓存，配合前端 `?refresh=1` 强制从 BigQuery 重新计算 | `_DATA_CACHE.clear()` |
 | `GET /api/agent/catalog` | 返回当前绑定的 BQCA Data Agent 与 Knowledge Catalog 治理资产元数据 | `geminidataanalytics` & `dataplex` 配置 |
 | `POST /api/agent/chat` | 调用 BQCA `:chat` 接口，返回语义推理步骤 (`thoughts`)、Markdown 回答 (`answer`)、执行的 SQL 与结果 (`sql_queries`) 及推荐追问 (`followup_questions`) | `geminidataanalytics.googleapis.com/v1beta` |
 
 ### 7.3 前端 16:9 宽屏与交互亮点 (`app/templates/index.html` & `releasenotes.html`)
 1. **16:9 宽屏自适应布局**：主容器采用 `max-width: 98vw`，充分利用宽屏显示器展示多桶多指标宽表。
-2. **表头与首列双向固定（Sticky Row Header + Sticky First Column）**：
+2. **前后端四级缓存加速与 5 步动态计算进度条**：
+   - **首次冷加载（5 步动态进度面板 `#dataLoadingPanel`）**：在并行拉取 5 组核心接口期间隐藏未就绪的 KPI 卡片（杜绝显示一排 `$0`），实时展示 `12% → 100%` 进度百分比与 5 个模块完成状态（`⏳ → ✅`）；
+   - **页面刷新 `0ms` 秒开（`localStorage` + SWR 静默校验）**：按 `F5` 刷新或从版本日志返回主看板时，直接从 `localStorage` 快照在 `0ms` 内瞬时渲染整页，并后台调用 `/api/cache/status` 静默比对数据版本；切换 RVP / Gross 视图时复用 `_nalTrendCache` / `_custTrendCache` 内存缓存，`0 网络请求、0ms 重绘曲线`；
+   - **顶栏一键强制刷新（`#btnRefreshCache`）**：顶栏提供 **`⚡ 本地缓存秒开 · 🔄 强制刷新`** 按钮，支持随时手动穿透前后端缓存拉取最新 BigQuery 数据。
+3. **表头与首列双向固定（Sticky Row Header + Sticky First Column）**：
    - 表头行 `thead th` 固定于顶部（`position: sticky; top: 0; z-index: 20`）；
    - 第一列（NAL 名称或客户名称）固定于左侧（`position: sticky; left: 0; z-index: 10`，表头左上角交叉格 `z-index: 30`），横向或纵向滚动时始终保持行列对齐。
-3. **点击第一列直接联动 DRR 曲线（NAL 级 + Account 级双层曲线）**：
-   - 直接点击任意表格**第一列（NAL 名称或客户名称）**，页面自动平滑滚动至对应的 **NAL 级别 DRR 曲线图** 或 **Account 级别 DRR 曲线图** 并加载每日走势。
-4. **Quota 完成页面对账截止日期横幅（As-of Date Banner）**：
-   - 在 Tab 4（三大桶 Quota 完成率）顶部醒目展示当前数据更新截止日期（区分消费类指标 `T-2` 最新完整出账日与签约类指标实时同步），方便业务人员与 `go/rainmaker` 按同一时间截面比对。
-5. **AI 数据分析 Agent 多行编辑框**：
-   - `BQCA + Knowledge Catalog` 查询输入框（`#agentInput`）采用多行 `<textarea rows="3">`，按 `Enter` 键在框内正常换行，支持 `Ctrl/Cmd + Enter` 或点击 **「发送查询 🚀」** 按钮提交查询。
-6. **独立版本更新日志页面（`/releasenotes`）**：
-   - 主看板顶部导航栏右侧内置 **📋 版本更新日志 (Release Notes)** 链接与 **🔒 7天长效免登** 状态徽标，点击可查看从 `v1.0.0` 到 `v1.9.0` 的全部功能迭代与对账校准历史，支持按分类筛选与关键词实时检索。
+4. **点击第一列直接联动 DRR 曲线（NAL 级 + Account 级 + GCP Project 级三层曲线）**：
+   - 直接点击任意表格**第一列（NAL 名称或客户名称）**，页面自动平滑滚动至对应的 **NAL 级别 DRR 曲线图** 或 **Account 级别 DRR 曲线图** 并加载每日走势；
+   - 在 Tab 5 顶部提供 **「🔍 GCP Project ID 细粒度 MRR & DRR 曲线速查工作台」**，支持按客户筛选或直接输入任意 `project_id` / `project_number`，并排绘制该 Project 的 **2026 自然月度 MRR 走势图** 与 **2026 每日 DRR 曲线及 7日移动均线图**（支持 RVP/Gross 一键切换与 AI 深度诊断）。
+5. **Quota 完成页面对账截止日期横幅（As-of Date Banner）**：
+   - 在顶栏横幅与 Tab 4 顶部醒目展示当前数据更新截止日期（区分消费类指标 `T-2` 最新完整出账日与签约类指标实时同步），方便业务人员与 `go/rainmaker` 按同一时间截面比对。
+6. **AI 数据分析 Agent 多行编辑框 + 对话气泡内时序曲线自动渲染**：
+   - `BQCA + Knowledge Catalog` 查询输入框（`#agentInput`）采用多行 `<textarea rows="3">`，按 `Enter` 键在框内正常换行，支持点击 **「发送查询 🚀」** 按钮提交查询；
+   - 当 BQCA 执行的 SQL 返回包含日期或月份列（`usage_date`、`year_month`、`date`、`month`）及数值指标列的结果集时，前端自动在 AI 回复气泡内渲染交互式 **Chart.js 折线曲线 / 柱状对比图**。
+7. **独立版本更新日志页面（`/releasenotes`）**：
+   - 主看板顶部导航栏右侧内置 **📋 版本更新日志 (Release Notes)** 链接与 **🔒 7天长效免登** 状态徽标，点击可查看从 `v1.0.0` 到 `v1.12.0` 的全部功能迭代与对账校准历史，支持按分类筛选与关键词实时检索。
 
 ---
 

@@ -1,0 +1,3633 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Google SSO 安全认证</title>
+  <!-- Distinctive Manufacturing (MANU) Industrial Gear & Factory SVG Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%231a73e8'/%3E%3Cstop offset='100%25' stop-color='%230d47a1'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23g)'/%3E%3Cpath d='M10 52V28l12 8V28l12 8V20h10v32H10z' fill='%23ffffff' opacity='0.92'/%3E%3Crect x='36' y='12' width='6' height='10' rx='1' fill='%23fbbc04'/%3E%3Ccircle cx='48' cy='24' r='9' fill='%23fbbc04' stroke='%230d47a1' stroke-width='2'/%3E%3Ccircle cx='48' cy='24' r='4' fill='%230d47a1'/%3E%3Crect x='15' y='40' width='5' height='6' fill='%231a73e8'/%3E%3Crect x='25' y='40' width='5' height='6' fill='%231a73e8'/%3E%3Crect x='35' y='40' width='5' height='6' fill='%231a73e8'/%3E%3C/svg%3E">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto+Mono:wght@400;500&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --google-blue: #1a73e8;
+      --google-blue-dark: #1557b0;
+      --google-blue-light: #e8f0fe;
+      --google-green: #1e8e3e;
+      --google-green-light: #e6f4ea;
+      --google-purple: #9334e6;
+      --google-purple-light: #f3e8fd;
+      --google-orange: #e37400;
+      --google-orange-light: #fef7e0;
+      --google-red: #d93025;
+      --google-red-light: #fce8e6;
+      --text-primary: #202124;
+      --text-secondary: #5f6368;
+      --border-color: #dadce0;
+      --bg-color: #f8f9fa;
+      --card-bg: #ffffff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Roboto', 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-primary);
+      line-height: 1.5;
+    }
+    header {
+      background: #ffffff;
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-badge {
+      background: linear-gradient(135deg, #1a73e8, #0d47a1);
+      color: #fff;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 5px 10px;
+      border-radius: 6px;
+      letter-spacing: 0.5px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 1px 3px rgba(26,115,232,0.3);
+    }
+    .brand h1 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #202124;
+    }
+    .brand .subtitle {
+      font-size: 12px;
+      color: var(--text-secondary);
+      background: #f1f3f4;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .user-profile {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .user-tag {
+      font-size: 13px;
+      color: var(--google-blue);
+      font-weight: 500;
+      background: var(--google-blue-light);
+      padding: 4px 10px;
+      border-radius: 16px;
+    }
+    .btn-logout {
+      font-size: 12px;
+      border: 1px solid var(--border-color);
+      background: #fff;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .btn-logout:hover { background: #f1f3f4; }
+
+    /* Top Mode Navigation Bar */
+    .top-nav {
+      background: #ffffff;
+      border-bottom: 1px solid var(--border-color);
+      padding: 0 28px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow-x: auto;
+    }
+    .nav-tab {
+      padding: 12px 18px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      border-bottom: 3px solid transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+    }
+    .nav-tab:hover {
+      color: var(--google-blue);
+      background: #f8f9fa;
+    }
+    .nav-tab.active {
+      color: var(--google-blue);
+      border-bottom-color: var(--google-blue);
+      font-weight: 600;
+    }
+    .nav-tab.ge.active {
+      color: var(--google-purple);
+      border-bottom-color: var(--google-purple);
+    }
+    .nav-tab.quota.active {
+      color: var(--google-green);
+      border-bottom-color: var(--google-green);
+    }
+
+    main {
+      width: 100%;
+      max-width: 98vw;
+      margin: 0 auto;
+      padding: 18px 24px;
+    }
+
+    /* Territory Three Buckets Banner (Source: concord-prod.service_cloudbi.nal_reporting) */
+    .quota-banner {
+      background: linear-gradient(135deg, #ffffff 0%, #f8fafd 100%);
+      border: 1px solid #c2d7fa;
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 6px rgba(26, 115, 232, 0.08);
+    }
+    .quota-banner-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .quota-banner-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #174ea6;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .quota-buckets-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 16px;
+    }
+    .bucket-card {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 14px 16px;
+      position: relative;
+    }
+    .bucket-card.highlight {
+      border-color: #a8dab5;
+      background: #fbfefc;
+    }
+    .bucket-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 6px;
+      gap: 8px;
+    }
+    .bucket-name {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .bucket-weight {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #f1f3f4;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+    .bucket-nums {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 8px;
+    }
+    .bucket-pct {
+      font-size: 22px;
+      font-weight: 700;
+      font-family: 'Google Sans', sans-serif;
+    }
+    .bucket-amts {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-family: 'Roboto Mono', monospace;
+    }
+    .progress-track {
+      width: 100%;
+      height: 8px;
+      background: #e8eaed;
+      border-radius: 4px;
+      position: relative;
+      overflow: hidden;
+      margin-bottom: 6px;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.4s ease;
+    }
+    .progress-marker {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: #202124;
+      z-index: 2;
+    }
+    .bucket-foot {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .grid-kpi {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .card-kpi {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 1px 2px rgba(60,64,67,0.06);
+    }
+    .card-kpi::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 4px;
+      background: var(--google-blue);
+    }
+    .card-kpi.ai::before { background: var(--google-purple); }
+    .card-kpi.da::before { background: #12b5cb; }
+    .card-kpi.db::before { background: var(--google-orange); }
+    .card-kpi.ge::before { background: #e91e63; }
+    .card-kpi.mrr::before { background: var(--google-green); }
+
+    .kpi-title {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+    .kpi-value {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-primary);
+      font-family: 'Google Sans', sans-serif;
+    }
+    .kpi-sub {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .pill {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .pill-green { background: var(--google-green-light); color: var(--google-green); }
+    .pill-blue { background: var(--google-blue-light); color: var(--google-blue); }
+    .pill-purple { background: var(--google-purple-light); color: var(--google-purple); }
+    .pill-orange { background: var(--google-orange-light); color: var(--google-orange); }
+    .pill-red { background: var(--google-red-light); color: var(--google-red); }
+
+    .section-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 18px 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 2px rgba(60,64,67,0.06);
+      transition: box-shadow 0.3s ease, border-color 0.3s ease;
+    }
+    .section-card.flash-focus {
+      border-color: var(--google-blue);
+      box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.22);
+    }
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .section-title {
+      font-size: 15px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .filters-bar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .input-search {
+      padding: 6px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: 13px;
+      width: 260px;
+    }
+    .input-search:focus {
+      outline: none;
+      border-color: var(--google-blue);
+      box-shadow: 0 0 0 2px var(--google-blue-light);
+    }
+    select.input-select {
+      padding: 6px 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: 13px;
+      background: #fff;
+    }
+
+    /* Sticky Row Header (Top) + Sticky Column Header (Left First Column) */
+    .table-container {
+      overflow: auto;
+      max-height: 68vh;
+      position: relative;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background: #ffffff;
+    }
+    .table-container table {
+      width: max-content;
+      min-width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 13px;
+      text-align: left;
+    }
+    .table-container thead th {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: #f1f5f9;
+      color: #334155;
+      font-weight: 600;
+      padding: 11px 14px;
+      border-bottom: 2px solid #cbd5e1;
+      border-right: 1px solid #e2e8f0;
+      white-space: nowrap;
+    }
+    .table-container thead th:first-child {
+      position: sticky;
+      left: 0;
+      top: 0;
+      z-index: 30;
+      background: #e2e8f0;
+      color: #0f172a;
+      border-right: 2px solid #cbd5e1;
+      box-shadow: 2px 0 6px -2px rgba(15, 23, 42, 0.12);
+    }
+    .table-container tbody td {
+      padding: 10px 14px;
+      border-bottom: 1px solid #e2e8f0;
+      border-right: 1px solid #f1f5f9;
+      white-space: nowrap;
+      background-color: #ffffff;
+    }
+    .table-container tbody td:first-child {
+      position: sticky;
+      left: 0;
+      z-index: 10;
+      background-color: #ffffff;
+      border-right: 2px solid #cbd5e1;
+      box-shadow: 2px 0 6px -2px rgba(15, 23, 42, 0.08);
+    }
+    .table-container tbody tr:hover td {
+      background-color: #f8fafd;
+    }
+    .table-container tbody tr:hover td:first-child {
+      background-color: #eef5ff;
+    }
+    .table-container tbody tr.active-row td {
+      background-color: #f0f6ff;
+    }
+    .table-container tbody tr.active-row td:first-child {
+      background-color: #e0edff;
+      box-shadow: inset 4px 0 0 var(--google-blue), 2px 0 6px -2px rgba(15, 23, 42, 0.12);
+    }
+    .table-container tbody tr.summary-row td {
+      background-color: #f1f6fe;
+      font-weight: 700;
+      border-top: 2px solid #1a73e8;
+      border-bottom: 2px solid #1a73e8;
+    }
+    .table-container tbody tr.summary-row td:first-child {
+      background-color: #e2edff;
+      z-index: 15;
+    }
+    /* Clickable First Column for Daily DRR Trend Curve */
+    td.clickable-col {
+      cursor: pointer;
+      color: var(--google-blue);
+      font-weight: 600;
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+    td.clickable-col:hover {
+      color: var(--google-blue-dark);
+      text-decoration: underline;
+    }
+    .trend-link-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .trend-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: var(--google-blue-light);
+      color: var(--google-blue);
+      font-weight: 500;
+      transition: all 0.15s ease;
+    }
+    td.clickable-col:hover .trend-badge {
+      background: var(--google-blue);
+      color: #ffffff;
+    }
+    .text-num {
+      text-align: right;
+      font-family: 'Roboto Mono', monospace;
+    }
+    .btn-action {
+      background: #fff;
+      border: 1px solid var(--border-color);
+      color: var(--google-blue);
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .btn-action:hover {
+      background: var(--google-blue-light);
+    }
+
+    /* Modal Gate for Google Sign-In (100% Opaque Before Auth) */
+    #gate {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, #f8fafd 0%, #eef2f8 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    .gate-box {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 40px 42px;
+      width: 440px;
+      text-align: center;
+      box-shadow: 0 12px 32px rgba(26, 115, 232, 0.08);
+    }
+    .gate-box h2 {
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+    .gate-box p {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+    }
+
+    /* Data Loading Progress Bar & Step Tracker */
+    #topProgressBarWrap {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3.5px;
+      background: rgba(26, 115, 232, 0.12);
+      z-index: 9998;
+      display: none;
+      overflow: hidden;
+    }
+    #topProgressBarFill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #1a73e8 0%, #9334e6 50%, #1e8e3e 100%);
+      transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .loading-panel {
+      background: linear-gradient(135deg, #ffffff 0%, #f4f8ff 100%);
+      border: 1px solid #d2e3fc;
+      border-radius: 14px;
+      padding: 28px 32px;
+      margin: 24px auto;
+      max-width: 780px;
+      box-shadow: 0 6px 24px rgba(26, 115, 232, 0.08);
+    }
+    .loading-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      gap: 12px;
+    }
+    .loading-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 16px;
+      font-weight: 700;
+      color: #174ea6;
+    }
+    .loading-pct {
+      font-size: 22px;
+      font-weight: 700;
+      font-family: 'Google Sans', sans-serif;
+      color: var(--google-blue);
+    }
+    .loading-track {
+      width: 100%;
+      height: 10px;
+      background: #e8eef7;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+    .loading-fill {
+      height: 100%;
+      width: 8%;
+      background: linear-gradient(90deg, #1a73e8 0%, #9334e6 60%, #1e8e3e 100%);
+      border-radius: 6px;
+      transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .loading-steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .loading-step-chip {
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      background: #f1f3f4;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+    .loading-step-chip.done {
+      background: var(--google-green-light);
+      color: var(--google-green);
+      font-weight: 600;
+    }
+    .loading-step-chip.active {
+      background: var(--google-blue-light);
+      color: var(--google-blue);
+      font-weight: 600;
+    }
+    @keyframes spinLoader {
+      to { transform: rotate(360deg); }
+    }
+    .spin-icon {
+      width: 18px;
+      height: 18px;
+      border: 2.5px solid #d2e3fc;
+      border-top-color: #1a73e8;
+      border-radius: 50%;
+      animation: spinLoader 0.8s linear infinite;
+      display: inline-block;
+    }
+
+    /* AI Agent View & Floating Button Styles */
+    .nav-tab.agent.active {
+      color: #0b57d0;
+      border-bottom-color: #0b57d0;
+      background: linear-gradient(180deg, rgba(232,240,254,0.4) 0%, rgba(243,232,253,0.4) 100%);
+    }
+    .agent-hero {
+      background: linear-gradient(135deg, #f0f4ff 0%, #f8f0fc 100%);
+      border: 1px solid #d2e3fc;
+      border-radius: 12px;
+      padding: 18px 22px;
+      margin-bottom: 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .preset-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .preset-card {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .preset-card:hover {
+      border-color: var(--google-blue);
+      box-shadow: 0 3px 10px rgba(26, 115, 232, 0.12);
+      transform: translateY(-1px);
+    }
+    .preset-card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--google-blue);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .preset-card-desc {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+    .chat-box {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      min-height: 480px;
+      max-height: 740px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(60,64,67,0.06);
+    }
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      background: #fafbfc;
+    }
+    .chat-msg {
+      display: flex;
+      gap: 12px;
+      max-width: 92%;
+    }
+    .chat-msg.user {
+      align-self: flex-end;
+      flex-direction: row-reverse;
+    }
+    .chat-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+      font-weight: 700;
+    }
+    .chat-msg.assistant .chat-avatar {
+      background: linear-gradient(135deg, #1a73e8, #9334e6);
+      color: #fff;
+    }
+    .chat-msg.user .chat-avatar {
+      background: var(--google-blue-light);
+      color: var(--google-blue);
+    }
+    .chat-bubble {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 14px 18px;
+      font-size: 13.5px;
+      line-height: 1.6;
+      color: var(--text-primary);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+      overflow-x: auto;
+    }
+    .chat-msg.user .chat-bubble {
+      background: var(--google-blue);
+      color: #ffffff;
+      border-color: var(--google-blue);
+    }
+    .chat-bubble table {
+      margin: 10px 0;
+      font-size: 12px;
+      border: 1px solid var(--border-color);
+    }
+    .chat-bubble th {
+      background: #f1f6fe;
+      color: #174ea6;
+      font-weight: 600;
+    }
+    .chat-bubble ul, .chat-bubble ol {
+      padding-left: 20px;
+      margin: 6px 0;
+    }
+    .chat-bubble p {
+      margin: 6px 0;
+    }
+    .sql-details {
+      margin-top: 12px;
+      border: 1px solid #d2e3fc;
+      border-radius: 8px;
+      background: #f8fafd;
+      overflow: hidden;
+    }
+    .sql-details summary {
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #174ea6;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      user-select: none;
+    }
+    .sql-code {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 12px;
+      font-family: 'Roboto Mono', monospace;
+      font-size: 11.5px;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .chat-input-bar {
+      padding: 14px 18px;
+      background: #ffffff;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+    .chat-input {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      font-size: 13.5px;
+      font-family: inherit;
+      line-height: 1.5;
+      min-height: 68px;
+      max-height: 220px;
+      resize: vertical;
+    }
+    .chat-input:focus {
+      outline: none;
+      border-color: var(--google-blue);
+      box-shadow: 0 0 0 2px var(--google-blue-light);
+    }
+    .btn-send {
+      background: linear-gradient(135deg, #1a73e8, #9334e6);
+      color: #ffffff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .btn-send:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .fab-agent {
+      position: fixed;
+      right: 28px;
+      bottom: 28px;
+      background: linear-gradient(135deg, #1a73e8, #9334e6);
+      color: #ffffff;
+      border: none;
+      border-radius: 28px;
+      padding: 12px 20px;
+      font-size: 13.5px;
+      font-weight: 600;
+      box-shadow: 0 4px 14px rgba(26, 115, 232, 0.35);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 90;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .fab-agent:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(147, 52, 230, 0.45);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Global Progress Bar -->
+  <div id="topProgressBarWrap">
+    <div id="topProgressBarFill"></div>
+  </div>
+
+  <!-- Google Auth Login Gate (100% Opaque, Zero Info Exposed Before Login) -->
+  <div id="gate">
+    <div class="gate-box">
+      <div style="margin-bottom:16px;">
+        <span class="logo-badge" style="font-size:15px;padding:6px 14px;">🔒 企业门户安全认证</span>
+      </div>
+      <h2>Google SSO 授权访问验证</h2>
+      <p id="gateMsg">请使用已获授权的 Google 企业账号登录访问系统（支持 7 天无状态长效会话与自动续期）。</p>
+      <div id="gbtn" style="display:flex; justify-content:center; margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- Protected Application Shell: Completely Hidden Until Authenticated -->
+  <div id="appProtectedShell" style="display:none;">
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <span class="logo-badge">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M2 20V9l6 4V9l6 4V4h8v16H2z"/>
+        </svg>
+        BHI MANU
+      </span>
+      <h1>2026 制造行业收入、Run Rate 与三大桶 Quota 达成看板</h1>
+      <span class="subtitle">go/plan2100 · go/rainmaker 口径</span>
+    </div>
+    <div class="user-profile">
+      <button id="btnRefreshCache" onclick="forceRefreshAllData()" style="display:inline-flex; align-items:center; gap:5px; background:#e6f4ea; color:#137333; border:1px solid #ceead6; padding:5px 12px; border-radius:16px; font-size:12px; font-weight:600; cursor:pointer; transition:all 0.15s ease;" title="当前使用前后端多级缓存加速（避免每次刷新重复查询 BigQuery）；点击可清空缓存并强制从 BigQuery 重新拉取最新数据">⚡ 缓存加速 · 🔄 刷新数据</button>
+      <a href="/releasenotes" style="display:inline-flex; align-items:center; gap:5px; background:#e8f0fe; color:#174ea6; border:1px solid #d2e3fc; padding:5px 12px; border-radius:16px; font-size:12px; font-weight:600; text-decoration:none; transition:all 0.15s ease;" title="查看系统历次版本修改与对账校准记录">📋 版本更新日志 (Release Notes)</a>
+      <span class="pill pill-green" id="sessionTtlBadge" style="display:none; font-size:11px;" title="无状态 HMAC-SHA256 HttpOnly 长效会话，剩余有效期低于 50% 自动续期">🔒 7天长效免登</span>
+      <span class="user-tag" id="userEmail">验证中...</span>
+      <button class="btn-logout" onclick="logout()">退出登录</button>
+    </div>
+  </header>
+
+  <!-- Top Mode Navigation Bar: RVP (Default) vs Gross vs GE vs Quota vs AI Agent -->
+  <div class="top-nav">
+    <div class="nav-tab active" id="tabRvp" onclick="switchMode('rvp')">
+      <span>📊 销售认账视图 (RVP Revenue)</span>
+      <span class="pill pill-blue">默认考核口径</span>
+    </div>
+    <div class="nav-tab" id="tabGross" onclick="switchMode('gross')">
+      <span>💵 毛消费出账视图 (Gross Revenue)</span>
+      <span class="pill pill-green">控制台出账</span>
+    </div>
+    <div class="nav-tab ge" id="tabGe" onclick="switchMode('ge')">
+      <span>✨ Gemini Enterprise (GE) 签约专区</span>
+      <span class="pill pill-purple">go/plan2100 签约口径</span>
+    </div>
+    <div class="nav-tab quota" id="tabQuota" onclick="switchMode('quota')">
+      <span>🎯 NAL 与整体三大桶 Quota 达成汇总</span>
+      <span class="pill pill-green">3 Buckets</span>
+    </div>
+    <div class="nav-tab agent" id="tabAgent" onclick="switchMode('agent')">
+      <span>🤖 AI 数据分析 Agent · 长尾查询</span>
+      <span class="pill pill-purple">BQCA + Knowledge Catalog</span>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <main>
+    <!-- Interactive Data Calculation Progress Panel (Shown While Backend Queries Run) -->
+    <div id="dataLoadingPanel" class="loading-panel" style="display:none;">
+      <div class="loading-head">
+        <div class="loading-title">
+          <span class="spin-icon"></span>
+          <span id="loadingMainText">正在从 BigQuery 实时计算并同步 2026 收入、Run Rate 与三大桶 Quota 对账数据...</span>
+        </div>
+        <div class="loading-pct" id="loadingPctText">10%</div>
+      </div>
+      <div class="loading-track">
+        <div class="loading-fill" id="loadingBarFill" style="width:10%;"></div>
+      </div>
+      <div style="font-size:12.5px; color:var(--text-secondary); margin-bottom:8px;" id="loadingSubText">
+        正在并行拉取 5 组核心分析数据集，完成后将一次性渲染完整看板（避免加载期间显示空白或 0 值）...
+      </div>
+      <div class="loading-steps">
+        <div class="loading-step-chip active" id="stepChipOverview">⏳ 1. 领地总览 KPI</div>
+        <div class="loading-step-chip active" id="stepChipQuota">⏳ 2. 三大桶 Quota 对账</div>
+        <div class="loading-step-chip active" id="stepChipScorecard">⏳ 3. NAL 与客户计分卡</div>
+        <div class="loading-step-chip active" id="stepChipMonthly">⏳ 4. 自然月 MRR 走势</div>
+        <div class="loading-step-chip active" id="stepChipGe">⏳ 5. GE 签约订单明细</div>
+      </div>
+    </div>
+
+    <!-- Top Territory 3-Bucket Quota Summary Banner (Source: service_cloudbi.nal_reporting) -->
+    <div class="quota-banner" id="territoryBanner" style="display:none;">
+      <div class="quota-banner-header">
+        <div class="quota-banner-title">
+          <span>🏆 MANU 领地 2026 三大考核桶整体 Quota 达成总览 (GCP iRev / DA+DB+Cloud AI iRev / GE Net ACV)</span>
+          <span class="pill pill-blue" id="bannerProratedBadge" title="年初至今已过天数占全年 365 天比例">日历时间进度基准: 计算中...</span>
+          <span class="pill pill-green" id="bannerCutoffBadge" title="用于与 go/rainmaker 进行对账的数据截止日期">🕒 消费出账截止: 同步中...</span>
+        </div>
+        <div style="font-size:12px; color:var(--text-secondary);">
+          <span id="bannerLastSyncText">数据更新: 同步中...</span> ·
+          <a href="javascript:void(0)" onclick="switchMode('quota')" style="color:var(--google-blue);text-decoration:none;font-weight:500;">查看全部 NAL 拆解 &rarr;</a>
+        </div>
+      </div>
+      <div class="quota-buckets-grid" id="territoryBucketsGrid">
+        <!-- Populated dynamically from /api/quota-attainment -->
+      </div>
+    </div>
+
+    <!-- View 1 & View 2: Revenue Mode View (RVP or Gross) -->
+    <div id="revenueView" style="display:none;">
+      <!-- KPI Row (5 Pillars: GCP, Cloud AI, DA, DB, Run Rate) -->
+      <div class="grid-kpi">
+        <div class="card-kpi">
+          <div class="kpi-title" id="kpiTitleGcp">2026 YTD GCP 销售认账 (RVP)</div>
+          <div class="kpi-value" id="kpiGcpVal">-</div>
+          <div class="kpi-sub">
+            <span>最新单日 DRR: <strong id="kpiGcpDrr">-</strong></span>
+            <span class="pill pill-blue">Bucket 1: GCP</span>
+          </div>
+        </div>
+
+        <div class="card-kpi ai">
+          <div class="kpi-title" id="kpiTitleAi">2026 YTD Cloud AI 认账 (RVP)</div>
+          <div class="kpi-value" id="kpiAiVal">-</div>
+          <div class="kpi-sub">
+            <span>AI 渗透率: <strong id="kpiAiPct">-</strong></span>
+            <span class="pill pill-purple">Bucket 2: AI</span>
+          </div>
+        </div>
+
+        <div class="card-kpi da">
+          <div class="kpi-title" id="kpiTitleDa">2026 YTD DA 认账 (RVP)</div>
+          <div class="kpi-value" id="kpiDaVal">-</div>
+          <div class="kpi-sub">
+            <span>DA 单日 DRR: <strong id="kpiDaDrr">-</strong></span>
+            <span class="pill pill-blue">Bucket 2: DA</span>
+          </div>
+        </div>
+
+        <div class="card-kpi db">
+          <div class="kpi-title" id="kpiTitleDb">2026 YTD DB 认账 (RVP)</div>
+          <div class="kpi-value" id="kpiDbVal">-</div>
+          <div class="kpi-sub">
+            <span>DB 单日 DRR: <strong id="kpiDbDrr">-</strong></span>
+            <span class="pill pill-orange">Bucket 2: DB</span>
+          </div>
+        </div>
+
+        <div class="card-kpi mrr">
+          <div class="kpi-title" id="kpiTitleMrr">自然月 Monthly Run Rate (MRR)</div>
+          <div class="kpi-value" id="kpiMrrVal">-</div>
+          <div class="kpi-sub">
+            <span>9月全月 MRR: <strong id="kpiPriorMrr">-</strong></span>
+            <span class="pill pill-green">自然月日历汇总</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Monthly Run Rate Walk Chart Section -->
+      <div class="section-card">
+        <div class="section-header">
+          <div class="section-title">
+            <span id="chartTitle">📈 2026 年自然月度 Monthly Run Rate (MRR) 走势 (GCP, AI, DA, DB)</span>
+          </div>
+        </div>
+        <div style="height: 280px;">
+          <canvas id="monthlyChart"></canvas>
+        </div>
+      </div>
+
+      <!-- LAYER 1 DRR CURVE: NAL-Level Daily Run Rate Trend Chart -->
+      <div class="section-card" id="nalDrilldownCard">
+        <div class="section-header">
+          <div class="section-title">
+            <span id="nalChartTitle">📈 NAL 级别 2026 Daily Run Rate (DRR) 每日曲线走势</span>
+            <span class="pill pill-purple">点击下方表格第一列 NAL 名称可切换曲线</span>
+          </div>
+          <div class="filters-bar">
+            <select id="selectNal" class="input-select" onchange="loadNalTrend(this.value, false)">
+              <!-- Options populated dynamically -->
+            </select>
+            <button class="btn-action" onclick="filterByCurrentNal()">🔽 在下方客户表中筛选该 NAL</button>
+          </div>
+        </div>
+        <div style="height: 270px;">
+          <canvas id="nalChart"></canvas>
+        </div>
+      </div>
+
+      <!-- LAYER 1 TABLE: NAL-Level Summary Table (Aggregated by NAL across the 3 Buckets) -->
+      <div class="section-card">
+        <div class="section-header">
+          <div class="section-title">
+            <span id="nalTableTitle">🏢 第一层汇总：按 NAL 维度汇总三大考核桶与 Run Rate 完成情况 (NAL Level Rollup)</span>
+            <span class="pill pill-purple" id="nalCountPill">12 个 NAL</span>
+            <span class="pill pill-blue">💡 点击第一列 NAL 名称直接查看上方 DRR 曲线</span>
+          </div>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr id="nalScorecardHeadRow"></tr>
+            </thead>
+            <tbody id="nalScorecardBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- LAYER 2 DRR CURVE: Single Customer (Account-Level) Daily Run Rate Trend Drilldown -->
+      <div class="section-card" id="customerDrilldownCard">
+        <div class="section-header">
+          <div class="section-title">
+            <span id="customerChartTitle">📈 客户 (Account) 级别 2026 Daily Run Rate (DRR) 每日曲线走势</span>
+            <span class="pill pill-blue">点击下方表格第一列客户名称可切换曲线</span>
+          </div>
+          <div class="filters-bar">
+            <select id="selectCustomer" class="input-select" onchange="loadCustomerTrend(this.value, false)">
+              <!-- Options populated dynamically -->
+            </select>
+          </div>
+        </div>
+        <div style="height: 270px;">
+          <canvas id="customerChart"></canvas>
+        </div>
+      </div>
+
+      <!-- LAYER 2 TABLE: Account-Level Scorecard Table -->
+      <div class="section-card">
+        <div class="section-header">
+          <div class="section-title">
+            <span id="tableTitle">📋 第二层明细：按客户 (Account) 维度汇总三大考核桶与 Run Rate 计分卡 (Account Level)</span>
+            <span class="pill pill-blue" id="accountCountPill">0 客户</span>
+            <span class="pill pill-purple">💡 点击第一列客户名称直接查看上方 DRR 曲线</span>
+          </div>
+          <div class="filters-bar">
+            <input type="text" id="searchInput" class="input-search" placeholder="搜索客户名称或 Reporting ID..." oninput="filterTable()">
+            <select id="nalFilter" class="input-select" onchange="filterTable()">
+              <option value="">全部 NAL 业务组</option>
+              <option value="Mobile">Mobile ENT (手机终端)</option>
+              <option value="Auto">Auto ENT (汽车与车机)</option>
+              <option value="Physical AI">Physical AI (具身与硬件智能)</option>
+              <option value="Smart Device">Smart Device (智能硬件/安克)</option>
+              <option value="Smart Home">Smart Home (智能家居)</option>
+              <option value="Strategic">Strategic Sel (顺为/金山)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table id="scorecardTable">
+            <thead>
+              <tr id="scorecardHeadRow"></tr>
+            </thead>
+            <tbody id="scorecardBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- View 3: Gemini Enterprise (GE) Signed Contract Bookings Dedicated View (NAL Level + Account Level) -->
+    <div id="geView" style="display:none;">
+      <div class="grid-kpi">
+        <div class="card-kpi ai">
+          <div class="kpi-title">go/plan2100 认账达成 (Rainmaker Net ACV)</div>
+          <div class="kpi-value" id="geKpiNalAttained">-</div>
+          <div class="kpi-sub">
+            <span>年度 Quota ($1.44M) 达成率: <strong id="geKpiNalPct">-</strong></span>
+            <span class="pill pill-green">扣水位线 -$49.18K 后</span>
+          </div>
+        </div>
+
+        <div class="card-kpi ge">
+          <div class="kpi-title">2026 GE 客户原始签约总额 (100% Signed ACV)</div>
+          <div class="kpi-value" id="geKpiSignedAcv">-</div>
+          <div class="kpi-sub">
+            <span>签约总合同额 (TCV): <strong id="geKpiSignedTcv">-</strong></span>
+            <span class="pill pill-purple">含续约与100% FSP</span>
+          </div>
+        </div>
+
+        <div class="card-kpi mrr">
+          <div class="kpi-title">水位线冲减前净增 (Pre-Watermark Net iACV)</div>
+          <div class="kpi-value" id="geKpiNetIacv">-</div>
+          <div class="kpi-sub">
+            <span>剔除续约 (<strong id="geKpiRenewalAcv">-</strong>) &amp; FSP 90%折算 (-$1,757)</span>
+            <span class="pill pill-blue">100% GE + 10% FSP</span>
+          </div>
+        </div>
+
+        <div class="card-kpi">
+          <div class="kpi-title">累计签约客户与授权席位数</div>
+          <div class="kpi-value" id="geKpiCustCount">-</div>
+          <div class="kpi-sub">
+            <span>签约总席位数 (Seats): <strong id="geKpiTotalSeats">-</strong></span>
+            <span class="pill pill-orange">订单笔数: <span id="geKpiOrdersCount">-</span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Monthly GE Signed Bookings Chart -->
+      <div class="section-card">
+        <div class="section-header">
+          <div class="section-title">
+            <span>📈 2026 年 Gemini Enterprise 月度签约金额走势 (Signed Bookings ACV: New / Expansion / Renewal)</span>
+          </div>
+        </div>
+        <div style="height: 260px;">
+          <canvas id="geMonthlyChart"></canvas>
+        </div>
+      </div>
+
+      <!-- LAYER 1: NAL-Level GE Signed Bookings Rollup -->
+      <div class="section-card">
+        <div class="section-header">
+          <div class="section-title">
+            <span>🏢 第一层汇总：按 NAL 维度汇总 Gemini Enterprise 签约金额与 Quota 完成情况 (go/rainmaker NETACV_MONTHLY 口径)</span>
+          </div>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>NAL 业务分组 (点击第一列查看 DRR 曲线 📈)</th>
+                <th class="text-num">go/rainmaker 认账达成 (NETACV_MONTHLY)</th>
+                <th class="text-num">2026 GE Net ACV Quota</th>
+                <th class="text-num">Quota 达成率</th>
+                <th class="text-num">签约客户数</th>
+                <th class="text-num">订单笔数</th>
+                <th class="text-num">签约总席位 (Seats)</th>
+                <th class="text-num">客户签约总额 (100% Signed ACV)</th>
+                <th class="text-num">新签 (New ACV)</th>
+                <th class="text-num">扩容 (Expansion)</th>
+                <th class="text-num">续约 (Renewal, 不计入Net)</th>
+                <th>最近签约日</th>
+              </tr>
+            </thead>
+            <tbody id="geNalTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- LAYER 2: Account-Level GE Signed Contracts Table -->
+      <div class="section-card">
+        <div class="section-header">
+          <div class="section-title">
+            <span>✨ 第二层明细：按客户 (Account) 维度汇总 Gemini Enterprise 签约合同与 SKU 明细 (Account Level)</span>
+          </div>
+          <div class="filters-bar">
+            <input type="text" id="geSearchInput" class="input-search" placeholder="搜索签约客户、NAL 或 SKU..." oninput="renderGeTable()">
+          </div>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>客户名称 (点击第一列查看 DRR 曲线 📈)</th>
+                <th>NAL 业务分组</th>
+                <th>签约产品 (Product L3)</th>
+                <th>签约 SKU 方案描述</th>
+                <th class="text-num">订单笔数</th>
+                <th class="text-num">签约席位数 (Seats)</th>
+                <th class="text-num">签约总金额 (Signed TCV)</th>
+                <th class="text-num">签约年化金额 (Signed ACV)</th>
+                <th class="text-num">水位线前 Net iACV (100% GE+10% FSP)</th>
+                <th class="text-num">新签 (New ACV)</th>
+                <th class="text-num">扩容 (Expansion)</th>
+                <th class="text-num">续约 (Renewal)</th>
+                <th>最近签约日期</th>
+              </tr>
+            </thead>
+            <tbody id="geTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- View 4: Overall & NAL-Level Three Buckets Quota Attainment View -->
+    <div id="quotaView" style="display:none;">
+      <!-- Quota Data Cutoff & go/rainmaker Reconciliation Reference Bar -->
+      <div class="section-card" style="background:linear-gradient(135deg, #f0fdf4 0%, #eff6ff 100%); border:1px solid #bbf7d0; padding:14px 20px; margin-bottom:18px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <span style="font-size:14px; font-weight:700; color:#166534;">🕒 当前数据更新与 <code>go/rainmaker</code> 对账截止基准说明：</span>
+            <span class="pill pill-green" id="quotaCutoffBillingPill" style="font-size:12.5px;">💵 桶1 &amp; 桶2 消费出账截止日: 2026-10-09 (T-2 完整出账 · 对齐 Rainmaker 2026-10-11)</span>
+            <span class="pill pill-purple" id="quotaCutoffGePill" style="font-size:12.5px;">✨ 桶3 GE 签约截止日: 实时同步 (最新已签订单: 2026-10-08)</span>
+            <span class="pill pill-blue" id="quotaCutoffProratedPill" style="font-size:12.5px;">📅 日历进度基准: 77.3% (282/365天)</span>
+          </div>
+          <div style="font-size:12.5px; color:#1e40af; font-weight:600;" id="quotaLastUpdatedBadge">
+            📌 BigQuery 表最后更新时间: 2026-10-12 (北京时间)
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4.1: Overall Territory Summary for the 3 Buckets -->
+      <div class="section-card">
+        <div class="section-header">
+          <div class="section-title">
+            <span>🎯 第一部分：MANU 领地整体三大考核桶 Quota 达成汇总 (Overall Territory Summary · 对齐 go/rainmaker)</span>
+            <span class="pill pill-green" id="quotaSec1CutoffPill">出账截止: 2026-10-09 | Rainmaker 校准日: 2026-10-11</span>
+          </div>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>三大考核桶名称 (Three Quota Buckets)</th>
+                <th class="text-num">2026 增量实际完成 (go/rainmaker Attainment)</th>
+                <th class="text-num">2026 增量 Quota (go/rainmaker Quota)</th>
+                <th class="text-num">增量 Quota 达成率 (Attainment %)</th>
+                <th class="text-num">距全年增量目标差额 (Remaining Gap)</th>
+                <th class="text-num">2025 全年基线 (PY Baseline)</th>
+                <th class="text-num">2026 全量实际完成 (Total Actuals)</th>
+                <th class="text-num">2026 全量营收目标 (Total Quota)</th>
+                <th class="text-num">全量 Quota 达成率 (Total Attainment %)</th>
+              </tr>
+            </thead>
+            <tbody id="overallThreeBucketsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Section 4.2: All NALs Breakdown for the 3 Buckets -->
+      <div class="section-card">
+        <div class="section-header">
+          <div class="section-title">
+            <span>🏢 第二部分：各 NAL 三大考核桶实际达成与 Quota 明细对比 (All Street-Level NALs Breakdown · 对齐 go/rainmaker 排序：实际达成在前，Quota 在后)</span>
+            <span class="pill pill-blue">12 个街区级 NAL + 领地总计</span>
+            <span class="pill pill-green" id="quotaSec2CutoffPill">数据截止: 2026-10-09 (Rainmaker 2026-10-11)</span>
+          </div>
+          <div class="filters-bar">
+            <select id="nalBucketModeSelect" class="input-select" onchange="renderNalThreeBucketsTable()">
+              <option value="irev">展示增量口径 (go/rainmaker iRevenue &amp; NETACV_MONTHLY vs Quota)</option>
+              <option value="total">展示全量口径 (Total RVP Revenue vs Total Quota)</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr id="nalThreeBucketsHead"></tr>
+            </thead>
+            <tbody id="nalThreeBucketsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Section 4.3: Quarterly Breakdown -->
+      <div class="section-card">
+        <div class="section-header">
+          <div class="section-title">
+            <span>📅 第三部分：MANU 领地 2026 分季度 (Q1-Q4) Quota 与基线对标明细</span>
+          </div>
+          <div class="filters-bar">
+            <select id="quotaProductFilter" class="input-select" onchange="renderQuarterlyQuotaTable()">
+              <option value="ALL_THREE">核心三大桶关联产品线 (GCP / AI / DA / DB / GE)</option>
+              <option value="ALL">全部细分产品线明细</option>
+              <option value="AI_SOLUTIONS">AI_SOLUTIONS (Cloud AI & Applied AI)</option>
+              <option value="GCP_CLASSIC_FIELD">GCP_CLASSIC_FIELD (GCP Core)</option>
+              <option value="ANALYTICS">ANALYTICS (DA 数据分析)</option>
+              <option value="MIGRATE_AND_MODERNIZE_DATABASES">MIGRATE_AND_MODERNIZE_DATABASES (DB 数据库)</option>
+              <option value="AGENTSPACE">AGENTSPACE (Gemini Enterprise Net ACV)</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>产品线 (Product Line)</th>
+                <th>季度 (Quarter)</th>
+                <th class="text-num">2025 同期基线 (PY Baseline)</th>
+                <th class="text-num">2026 全量目标 (Total Quota)</th>
+                <th class="text-num">2026 净增目标 (iRev Quota)</th>
+                <th class="text-num">2026 实际营收 (Actuals RVP)</th>
+                <th class="text-num">全量目标达成率</th>
+                <th class="text-num">Bookings 签约 Quota</th>
+                <th class="text-num">Bookings 实际完成</th>
+              </tr>
+            </thead>
+            <tbody id="quarterlyQuotaBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- View 5: AI Data Analytics Agent (BQCA + Knowledge Catalog for Long-Tail Ad-Hoc Queries) -->
+    <div id="agentView" style="display:none;">
+      <div class="agent-hero">
+        <div>
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
+            <h2 style="font-size:17px; color:#174ea6; margin:0;">🤖 BHI Manufacturing 2026 智能数据分析 Agent · 长尾与 Project 细粒度曲线查询</h2>
+            <span class="pill pill-purple">BigQuery Conversational Analytics API (v1beta)</span>
+            <span class="pill pill-blue">Knowledge Catalog 语义治理 (14 表 · 374 列 · 9 项业务术语 · 9 组黄金验证 SQL)</span>
+            <span class="pill pill-green">📈 支持 Project ID 级 MRR &amp; DRR 曲线自动渲染</span>
+          </div>
+          <p style="font-size:13px; color:var(--text-secondary);">
+            基于 Google Cloud 原生 <strong>BQCA (<code>geminidataanalytics.googleapis.com</code>) + Knowledge Catalog (<code>bhi-manu-2026-glossary</code>)</strong> 架构，现已扩展接入 <strong>GCP Project 级细粒度账单模型（覆盖全领地 5,414 个 Project ID 的月度 MRR 与每日 DRR 曲线）</strong>。您既可在下方<strong>工作台一键速查任意 <code>project_id</code> 的 MRR/DRR 曲线</strong>，也可直接在<strong>AI 对话框</strong>中提问，AI 返回的时序数据将<strong>自动在气泡内渲染为交互式曲线图</strong>！
+          </p>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="btn-action" style="padding:6px 12px; font-size:12px;" onclick="clearAgentChat()">🗑️ 清空对话</button>
+        </div>
+      </div>
+
+      <!-- NEW: Interactive GCP Project ID MRR & DRR Curve Quick-Lookup Workbench -->
+      <div class="section-card" id="projectCurveWorkbench" style="border:1px solid #d2e3fc; background:linear-gradient(180deg, #f8fbff 0%, #ffffff 42%); margin-bottom:18px;">
+        <div class="section-header" style="border-bottom:1px solid #e8f0fe; padding-bottom:12px; margin-bottom:14px;">
+          <div class="section-title" style="flex-wrap:wrap; gap:8px;">
+            <span style="font-size:15px; font-weight:700; color:#174ea6;">🔍 GCP Project ID 细粒度 MRR &amp; DRR 曲线速查工作台 (Project-Level RunRate Explorer)</span>
+            <span class="pill pill-blue" id="projTotalCountBadge">已治理 5,414 个 GCP Project</span>
+            <span class="pill pill-purple">支持 RVP / Gross 双口径切换与 AI 一键下钻</span>
+          </div>
+          <div class="filters-bar" style="flex-wrap:wrap; gap:8px;">
+            <select id="projCustomerFilter" class="input-select" style="max-width:210px;" onchange="onProjCustomerFilterChange()">
+              <option value="">全部客户 (All Customers)</option>
+            </select>
+            <select id="projSelectDropdown" class="input-select" style="min-width:250px; max-width:340px;" onchange="loadProjectCurveWorkbench(this.value)">
+              <option value="vivocloudai">加载 Top GCP Projects 中...</option>
+            </select>
+            <div style="display:flex; gap:4px; align-items:center;">
+              <input type="text" id="projCustomInput" class="input-search" style="width:210px;" placeholder="输入任意 project_id 或编号..." onkeydown="if(event.key==='Enter'){event.preventDefault(); searchCustomProjectCurve();}">
+              <button class="btn-action" style="background:#1a73e8; color:#fff; border-color:#1a73e8; font-weight:600;" onclick="searchCustomProjectCurve()">📈 查曲线</button>
+            </div>
+            <select id="projMetricModeSelect" class="input-select" onchange="renderCurrentProjectCharts()">
+              <option value="rvp">RVP 销售认账口径 (默认)</option>
+              <option value="gross">Gross 毛出账口径</option>
+            </select>
+            <button class="btn-action" style="background:#f3e8fd; color:#681da8; border-color:#d7aefb; font-weight:600;" onclick="askAiAboutCurrentProject()">🤖 让 AI 深度诊断该 Project</button>
+          </div>
+        </div>
+
+        <!-- Selected Project Metadata Summary Strip -->
+        <div id="projMetaSummaryStrip" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(175px, 1fr)); gap:10px; margin-bottom:14px;">
+          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px;">
+            <div style="font-size:11px; color:#64748b; font-weight:600;">当前 Project ID / Number</div>
+            <div style="font-size:14px; font-weight:700; color:#0f172a; margin-top:2px; font-family:'Roboto Mono',monospace;" id="pmProjectId">-</div>
+            <div style="font-size:11px; color:#64748b; margin-top:2px;" id="pmProjectSub">Billing Account: -</div>
+          </div>
+          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px;">
+            <div style="font-size:11px; color:#64748b; font-weight:600;">归属客户 &amp; 一线 NAL</div>
+            <div style="font-size:13.5px; font-weight:700; color:#174ea6; margin-top:2px;" id="pmAccountName">-</div>
+            <div style="font-size:11px; color:#64748b; margin-top:2px;" id="pmNalName">-</div>
+          </div>
+          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px;">
+            <div style="font-size:11px; color:#64748b; font-weight:600;">2026 YTD GCP 收入</div>
+            <div style="font-size:15px; font-weight:700; color:#1a73e8; margin-top:2px;" id="pmYtdGcp">-</div>
+            <div style="font-size:11px; color:#64748b; margin-top:2px;" id="pmYtdGrossSub">Gross: -</div>
+          </div>
+          <div style="background:#faf5ff; border:1px solid #e9d5ff; border-radius:8px; padding:10px 12px;">
+            <div style="font-size:11px; color:#6b21a8; font-weight:600;">2026 YTD Cloud AI &amp; 桶2</div>
+            <div style="font-size:15px; font-weight:700; color:#9334e6; margin-top:2px;" id="pmYtdAi">-</div>
+            <div style="font-size:11px; color:#6b21a8; margin-top:2px;" id="pmYtdBucket2Sub">DA+DB+AI: -</div>
+          </div>
+          <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px 12px;">
+            <div style="font-size:11px; color:#166534; font-weight:600;">上月 (9月) vs 当月 (10月) MRR</div>
+            <div style="font-size:14px; font-weight:700; color:#15803d; margin-top:2px;" id="pmMrrComp">-</div>
+            <div style="font-size:11px; color:#166534; margin-top:2px;" id="pmMomGrowthSub">日均 DRR 环比: -</div>
+          </div>
+          <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:10px 12px;">
+            <div style="font-size:11px; color:#92400e; font-weight:600;">最新单日 DRR &amp; 7日均值</div>
+            <div style="font-size:15px; font-weight:700; color:#b45309; margin-top:2px;" id="pmLatestDrr">-</div>
+            <div style="font-size:11px; color:#92400e; margin-top:2px;" id="pm7dAvgSub">近7日日均: -</div>
+          </div>
+        </div>
+
+        <!-- Dual Charts Row: Left = Monthly MRR Curve/Bar, Right = Daily DRR Curve -->
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(420px, 1fr)); gap:16px;">
+          <div style="background:#ffffff; border:1px solid var(--border-color); border-radius:10px; padding:12px 14px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <span style="font-size:13px; font-weight:700; color:#1e293b;" id="projMrrChartTitle">📊 Project 自然月度 MRR 走势 (2026-01 ~ 2026-10)</span>
+              <span class="pill pill-blue" style="font-size:11px;">project_monthly_revenue</span>
+            </div>
+            <div style="height:245px;">
+              <canvas id="projMrrCanvas"></canvas>
+            </div>
+          </div>
+          <div style="background:#ffffff; border:1px solid var(--border-color); border-radius:10px; padding:12px 14px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <span style="font-size:13px; font-weight:700; color:#1e293b;" id="projDrrChartTitle">📈 Project 每日 Daily Run Rate (DRR) 曲线与 7日均线</span>
+              <span class="pill pill-purple" style="font-size:11px;">project_daily_runrate</span>
+            </div>
+            <div style="height:245px;">
+              <canvas id="projDrrCanvas"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- One-click Preset Long-Tail Queries -->
+      <div class="preset-grid">
+        <div class="preset-card" style="border-left:3px solid #1a73e8;" onclick="askAgentPreset('请查询 Project ID 为 `vivocloudai` 的 2026 年月度 MRR 走势（包含 GCP、Cloud AI、DA、DB 的 RVP MRR 及当月日均 DRR）以及每日 DRR 曲线。')">
+          <div class="preset-card-title">📈 1. 指定 Project ID (`vivocloudai`) 每日 DRR 曲线</div>
+          <div class="preset-card-desc">基于 `project_daily_runrate` 查询 `vivocloudai` 的每日 GCP 与 Cloud AI DRR 及 7日均线，自动在对话气泡内绘制交互式曲线图。</div>
+        </div>
+        <div class="preset-card" style="border-left:3px solid #9334e6;" onclick="askAgentPreset('请按月度汇总 Project ID `oppo-gcp-prod-159055` 在 2026-01 至 2026-10 每个自然月的 GCP RVP MRR、Cloud AI RVP MRR 与当月日均 DRR 曲线。')">
+          <div class="preset-card-title">📊 2. 指定 Project ID (`oppo-gcp-prod-159055`) 月度 MRR 曲线</div>
+          <div class="preset-card-desc">按自然月查看 OPPO 核心 AI 项目 `oppo-gcp-prod-159055` 的月度 MRR 爬坡走势并自动渲染趋势图。</div>
+        </div>
+        <div class="preset-card" style="border-left:3px solid #0d9488;" onclick="askAgentPreset('2026 年 YTD Cloud AI RVP 消费金额最高的 Top 20 GCP Project ID 是哪些？请列出它们的 project_id、所属客户、所属 NAL、YTD Cloud AI RVP 收入、最新单日 DRR 及上月/当月 MRR。')">
+          <div class="preset-card-title">🏆 3. 全领地 Cloud AI Top 20 GCP Project ID 排行</div>
+          <div class="preset-card-desc">跨客户扫描 5,414 个 Project，定位贡献最高 Cloud AI RVP 收入的前 20 个核心生产 Project ID 与最新单日 DRR。</div>
+        </div>
+        <div class="preset-card" onclick="askAgentPreset('请帮我拆解 MANU 整体 GE 签约总额 $768,127.39 与 go/rainmaker 最新认账达成 $713,029.30 之间的三步差异桥梁（含 10月8日华米新增 $931.94、续约剔除 -$4,159.62、FSP 10% 折算 -$1,757.43、以及 fankaia 月度水位线冲减 -$49,181.03），并列出 12 个 NAL 的三大桶达成情况（含 wendylv 桶 1 实绩 $18,426,974.50 / Quota $18,407,282.00 = 100.11%）。')">
+          <div class="preset-card-title">🔍 4. GE $713,029.30 差异拆解 &amp; 12 个 NAL 三大桶核对</div>
+          <div class="preset-card-desc">完整拆解 $768,127.39 → $762,210.33 → $713,029.30 三步对账桥梁及 12 个 NAL 三大桶最新达成率。</div>
+        </div>
+        <div class="preset-card" onclick="askAgentPreset('帮我查询 2026 年 9 月相比 8 月 Cloud AI RVP MRR 环比增长额（MoM 绝对值与百分比）最高的 Top 10 客户，并列出他们所属的 NAL 和最新单日 DRR。')">
+          <div class="preset-card-title">🚀 5. Cloud AI 月度环比高增长 Top 10 客户</div>
+          <div class="preset-card-desc">跨月对比 9 月 vs 8 月 Cloud AI RVP MRR 净增额最大的前 10 家客户及当前最新单日 DRR。</div>
+        </div>
+        <div class="preset-card" onclick="askAgentPreset('哪些客户在 2026 年的 DA + DB + Cloud AI RVP 收入合计超过 $50,000，但目前还没有签约任何 Gemini Enterprise (GE) 订单？请按桶 2 收入从高到低排出 Top 15 商机名单。')">
+          <div class="preset-card-title">💡 6. GE 空白商机挖掘 (高 DA/DB/AI 未签 GE 客户)</div>
+          <div class="preset-card-desc">跨表筛查 Bucket 2 (DA+DB+AI) 消费旺盛但尚未签约 Gemini Enterprise 的 Top 15 重点突破客户。</div>
+        </div>
+        <div class="preset-card" onclick="askAgentPreset('请对比各客户最新单日 GCP RVP DRR (latest_gcp_rvp_drr) 与其 9 月日均 DRR (prior_month_gcp_rvp_mrr / 30)，找出最新单日 DRR 下滑幅度最大的 Top 10 客户（限定 9 月 MRR > $10,000），用于流失预警。')">
+          <div class="preset-card-title">⚠️ 7. 客户最新单日 DRR 异常下跌预警</div>
+          <div class="preset-card-desc">对比最新单日 DRR 与 9 月日均 DRR，识别近期用量显著回落的重点客户。</div>
+        </div>
+        <div class="preset-card" onclick="askAgentPreset('请按自然月 (2026-01 至 2026-10) 汇总整个 MANU 领地的 GCP、Cloud AI、DA、DB 四条线的 RVP MRR 以及 Cloud AI + DA + DB 合计占 GCP RVP 的比例变化趋势。')">
+          <div class="preset-card-title">📊 8. 全领地 1-10 月 Bucket 2 渗透率演进曲线</div>
+          <div class="preset-card-desc">按月展示 GCP 与 AI/DA/DB 的自然月 MRR 及核心增长引擎渗透率走势，并自动绘制月度曲线图。</div>
+        </div>
+      </div>
+
+      <!-- Chat Interface -->
+      <div class="chat-box">
+        <div class="chat-messages" id="agentMessages">
+          <div class="chat-msg assistant">
+            <div class="chat-avatar">🤖</div>
+            <div class="chat-bubble">
+              <p><strong>您好！我是基于 BigQuery Conversational Analytics (BQCA) + Knowledge Catalog 驱动的 BHI Manufacturing 2026 数据分析 Agent。</strong></p>
+              <p>我已加载 <strong>Knowledge Catalog 业务术语表 (<code>bhi-manu-2026-glossary</code>)</strong>、<strong><code>cliu201-477811.bhi_manu</code> 14 张治理表（含最新扩充的 GCP Project 级月度 MRR 表 <code>project_monthly_revenue</code>、每日 DRR 曲线表 <code>project_daily_runrate</code> 及项目计分卡 <code>project_revenue_scorecard_2026</code>）</strong>。您可以：</p>
+              <ul>
+                <li>在上方<strong>「🔍 GCP Project ID 细粒度 MRR &amp; DRR 曲线速查工作台」</strong>直接选择或输入任意 <code>project_id</code>（如 <code>vivocloudai</code>、<code>xiaomi-ind</code>、<code>oppo-gcp-prod-159055</code>、<code>ai-mify-pt-1</code>）秒看双曲线；</li>
+                <li>或在下方用自然语言提问任何 <strong>Project ID / Billing Account / 客户 / NAL 的月度 MRR 与每日 DRR 曲线</strong>，只要 SQL 结果包含日期或月份序列，我都会在对话框内<strong>自动为您绘制交互式折线/柱状趋势图</strong>！</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="chat-input-bar">
+          <textarea id="agentInput" class="chat-input" rows="3" placeholder="输入您的长尾查询问题（支持基于任意 project_id 查询月度 MRR 或每日 DRR 曲线，如：请画出 project_id 为 ai-mify-pt-1 的 2026 每日 DRR 曲线）..."></textarea>
+          <button class="btn-send" id="agentSendBtn" onclick="sendAgentMessage()">发送查询 🚀</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Floating Quick-Jump Button to AI Agent -->
+  <button class="fab-agent" id="fabAgentBtn" onclick="switchMode('agent')" title="打开 AI 数据分析 Agent 解决长尾查询" style="display:none;">
+    <span>🤖 AI 长尾查询助手</span>
+  </button>
+  </div><!-- /#appProtectedShell -->
+
+  <script>
+    var IDT = '';
+    var currentMode = 'rvp'; // 'rvp' (default), 'gross', 'ge', 'quota', or 'agent'
+    var overviewData = null;
+    var rawScorecard = [];
+    var nalScorecard = [];
+    var monthlyData = [];
+    var geData = [];
+    var geNalData = [];
+    var geMonthlyData = [];
+    var nalBuckets = [];
+    var quarterlyQuotas = [];
+    var monthlyChartInst = null;
+    var nalChartInst = null;
+    var customerChartInst = null;
+    var geMonthlyChartInst = null;
+    var currentSelectedNal = '';
+    var currentSelectedCustomer = '';
+
+    // Multi-Layer Frontend Cache Configuration
+    var PORTAL_CACHE_KEY = 'bhi_manu_portal_cache_v2';
+    var TREND_CACHE_KEY = 'bhi_manu_trend_cache_v2';
+    var PORTAL_CACHE_TTL_MS = 6 * 3600 * 1000; // 6 hours local snapshot TTL
+    var _nalTrendCache = {};
+    var _custTrendCache = {};
+
+    function loadTrendCacheFromSession() {
+      try {
+        var raw = sessionStorage.getItem(TREND_CACHE_KEY);
+        if (!raw) return;
+        var parsed = JSON.parse(raw);
+        if (parsed && (Date.now() - (parsed.ts || 0) < PORTAL_CACHE_TTL_MS)) {
+          _nalTrendCache = parsed.nal || {};
+          _custTrendCache = parsed.cust || {};
+        }
+      } catch (e) {}
+    }
+
+    function saveTrendCacheToSession() {
+      try {
+        sessionStorage.setItem(TREND_CACHE_KEY, JSON.stringify({
+          ts: Date.now(),
+          nal: _nalTrendCache,
+          cust: _custTrendCache
+        }));
+      } catch (e) {}
+    }
+
+    loadTrendCacheFromSession();
+
+    function updateCacheBadge(label, isHit) {
+      var btn = document.getElementById('btnRefreshCache');
+      if (!btn) return;
+      btn.textContent = label;
+      if (isHit) {
+        btn.style.background = '#e6f4ea';
+        btn.style.color = '#137333';
+        btn.style.borderColor = '#ceead6';
+      } else {
+        btn.style.background = '#fef7e0';
+        btn.style.color = '#b06000';
+        btn.style.borderColor = '#fde293';
+      }
+    }
+
+    async function forceRefreshAllData() {
+      updateCacheBadge('🔄 正在清空前后端缓存并重新拉取...', false);
+      try {
+        localStorage.removeItem(PORTAL_CACHE_KEY);
+        sessionStorage.removeItem(TREND_CACHE_KEY);
+      } catch (e) {}
+      _nalTrendCache = {};
+      _custTrendCache = {};
+      try {
+        await authFetch('/api/cache/clear', { method: 'POST' });
+      } catch (e) {}
+      await loadAllData(true);
+    }
+
+    function syncAdminLink(email, isAdmin) {
+      var clean = (email || '').trim().toLowerCase();
+      var existing = document.getElementById('adminAuditLink');
+      if (isAdmin || clean === 'liuchenggang@google.com') {
+        if (!existing) {
+          var profileBar = document.querySelector('.user-profile');
+          if (profileBar) {
+            var a = document.createElement('a');
+            a.id = 'adminAuditLink';
+            a.href = '/admin-audit';
+            a.style.cssText = 'display:inline-flex; align-items:center; gap:5px; background:#f3e8fd; color:#681da8; border:1px solid #d7aefb; padding:5px 12px; border-radius:16px; font-size:12px; font-weight:600; text-decoration:none; transition:all 0.15s ease;';
+            a.title = '管理员专属隐藏页面：查看过去一个月用户访问统计与安全审计日志';
+            a.textContent = '🛡️ 访问统计 (Admin)';
+            profileBar.insertBefore(a, profileBar.firstChild);
+          }
+        }
+      } else if (existing && existing.parentNode) {
+        existing.parentNode.removeChild(existing);
+      }
+    }
+
+    function trackAuditEvent(eventType, pathOrAction, detail) {
+      try {
+        authFetch('/api/audit/track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            event_type: eventType,
+            path_or_action: pathOrAction,
+            detail: detail || ''
+          })
+        }).catch(function() {});
+      } catch (e) {}
+    }
+
+    function showGate(msg) {
+      document.title = 'Google SSO 安全认证';
+      var shell = document.getElementById('appProtectedShell');
+      if (shell) shell.style.display = 'none';
+      var topBar = document.getElementById('topProgressBarWrap');
+      if (topBar) topBar.style.display = 'none';
+      var g = document.getElementById('gate');
+      g.style.display = 'flex';
+      if (msg) document.getElementById('gateMsg').textContent = msg;
+    }
+    function hideGate() {
+      document.title = '🏭 BHI Manu 2026 | Revenue & Territory Quota';
+      document.getElementById('gate').style.display = 'none';
+      var shell = document.getElementById('appProtectedShell');
+      if (shell) shell.style.display = 'block';
+    }
+
+    function authFetch(url, opt) {
+      opt = opt || {};
+      opt.credentials = 'same-origin';
+      opt.headers = Object.assign({}, opt.headers || {});
+      if (IDT) opt.headers['Authorization'] = 'Bearer ' + IDT;
+      return fetch(url, opt).then(function(r) {
+        var renewedToken = r.headers.get('x-session-token');
+        if (renewedToken) {
+          IDT = renewedToken;
+          sessionStorage.setItem('id_token', IDT);
+        }
+        if (r.status === 401) {
+          IDT = '';
+          sessionStorage.removeItem('id_token');
+          showGate('会话已过期或未登录，请使用授权企业账号重新登录');
+          throw new Error('401');
+        }
+        if (r.status === 403) {
+          IDT = '';
+          sessionStorage.removeItem('id_token');
+          showGate('拒绝访问：当前账号未获得访问授权，请联系系统管理员开通权限');
+          throw new Error('403');
+        }
+        return r;
+      });
+    }
+
+    async function logout() {
+      IDT = '';
+      sessionStorage.removeItem('id_token');
+      try {
+        localStorage.removeItem(PORTAL_CACHE_KEY);
+        sessionStorage.removeItem(TREND_CACHE_KEY);
+      } catch (e) {}
+      _nalTrendCache = {};
+      _custTrendCache = {};
+      try {
+        await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+      } catch (e) {}
+      if (window.google && google.accounts && google.accounts.id) {
+        google.accounts.id.disableAutoSelect();
+      }
+      var ttlBadge = document.getElementById('sessionTtlBadge');
+      if (ttlBadge) ttlBadge.style.display = 'none';
+      showGate('您已安全退出长效会话，请重新登录');
+    }
+
+    async function initAuth() {
+      var saved = sessionStorage.getItem('id_token');
+      if (saved) { IDT = saved; }
+
+      var cfg = await (await fetch('/authconfig', { credentials: 'same-origin' })).json();
+      if (!cfg.app_auth) {
+        hideGate();
+        document.getElementById('userEmail').textContent = 'Auth Disabled (Local)';
+        loadAllData();
+        return;
+      }
+      if (!cfg.client_id) {
+        return showGate('管理员尚未配置 OAUTH_CLIENT_ID');
+      }
+
+      var boot = function() {
+        google.accounts.id.initialize({
+          client_id: cfg.client_id,
+          ux_mode: 'popup',
+          callback: function(resp) {
+            setTimeout(async function() {
+              try {
+                var r = await fetch('/api/auth/session', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'same-origin',
+                  body: JSON.stringify({ credential: resp.credential })
+                });
+                if (r.status === 403) {
+                  showGate('拒绝访问：当前账号未获得访问授权，请联系系统管理员开通权限');
+                  return;
+                }
+                if (!r.ok) {
+                  showGate('登录换票失败，请重试');
+                  return;
+                }
+                var data = await r.json();
+                IDT = data.session_token || resp.credential;
+                sessionStorage.setItem('id_token', IDT);
+                document.getElementById('userEmail').textContent = data.email || '';
+                syncAdminLink(data.email, data.is_admin);
+                var ttlBadge = document.getElementById('sessionTtlBadge');
+                if (ttlBadge) {
+                  var days = Math.round((data.expires_in || 604800) / 86400);
+                  ttlBadge.textContent = '🔒 ' + days + '天长效免登';
+                  ttlBadge.style.display = 'inline-block';
+                }
+                hideGate();
+                loadAllData();
+              } catch (err) {
+                console.error('Session exchange failed:', err);
+                showGate('登录验证异常，请重试');
+              }
+            }, 80);
+          }
+        });
+        google.accounts.id.renderButton(document.getElementById('gbtn'), {
+          theme: 'outline',
+          size: 'large',
+          text: 'signin_with',
+          shape: 'rectangular'
+        });
+      };
+
+      if (window.google && google.accounts) { boot(); }
+      else {
+        var t = setInterval(function() {
+          if (window.google && google.accounts) {
+            clearInterval(t);
+            boot();
+          }
+        }, 200);
+      }
+
+      // 优先检查浏览器是否已持有有效的 7 天 HttpOnly Session Cookie (或 Bearer Token)
+      try {
+        var headers = {};
+        if (IDT) headers['Authorization'] = 'Bearer ' + IDT;
+        var who = await fetch('/api/whoami', { credentials: 'same-origin', headers: headers });
+        if (who.ok) {
+          var wdata = await who.json();
+          var renewedToken = who.headers.get('x-session-token');
+          if (renewedToken) {
+            IDT = renewedToken;
+            sessionStorage.setItem('id_token', IDT);
+          }
+          document.getElementById('userEmail').textContent = wdata.user || '';
+          syncAdminLink(wdata.user, wdata.is_admin);
+          var ttlBadge = document.getElementById('sessionTtlBadge');
+          if (ttlBadge && wdata.remaining_seconds) {
+            var remDays = (wdata.remaining_seconds / 86400).toFixed(1);
+            ttlBadge.textContent = '🔒 长效会话 (余 ' + remDays + ' 天)';
+            ttlBadge.style.display = 'inline-block';
+          }
+          hideGate();
+          loadAllData();
+          return;
+        }
+      } catch (e) {}
+
+      IDT = '';
+      sessionStorage.removeItem('id_token');
+      showGate();
+    }
+
+    function fmtUSD(n) {
+      if (n === null || n === undefined || isNaN(n)) return '$0';
+      var num = Number(n);
+      if (num < 0) {
+        return '-$' + Math.abs(num).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+      }
+      return '$' + num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    function fmtUSD2(n) {
+      if (n === null || n === undefined || isNaN(n)) return '$0.00';
+      var num = Number(n);
+      if (num < 0) {
+        return '-$' + Math.abs(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+      return '$' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function fmtCompactUSD(n) {
+      if (n === null || n === undefined || isNaN(n)) return '$0';
+      var num = Number(n);
+      var sign = num < 0 ? '-' : '';
+      var abs = Math.abs(num);
+      if (abs >= 1e6) return sign + '$' + (abs / 1e6).toFixed(2) + 'M';
+      if (abs >= 1e3) return sign + '$' + (abs / 1e3).toFixed(1) + 'K';
+      return sign + '$' + abs.toFixed(0);
+    }
+
+    var _hasCompletedInitialRender = false;
+    function switchMode(mode) {
+      var prevMode = currentMode;
+      currentMode = mode;
+      if (_hasCompletedInitialRender && prevMode !== mode) {
+        trackAuditEvent('TAB_SWITCH', 'tab:' + mode, '切换主看板视图至: ' + mode.toUpperCase());
+      }
+      document.getElementById('tabRvp').classList.remove('active');
+      document.getElementById('tabGross').classList.remove('active');
+      document.getElementById('tabGe').classList.remove('active');
+      document.getElementById('tabQuota').classList.remove('active');
+      document.getElementById('tabAgent').classList.remove('active');
+
+      document.getElementById('revenueView').style.display = 'none';
+      document.getElementById('geView').style.display = 'none';
+      document.getElementById('quotaView').style.display = 'none';
+      document.getElementById('agentView').style.display = 'none';
+      document.getElementById('fabAgentBtn').style.display = (mode === 'agent') ? 'none' : 'flex';
+
+      if (mode === 'rvp') {
+        document.getElementById('tabRvp').classList.add('active');
+        document.getElementById('territoryBanner').style.display = nalBuckets.length ? 'block' : 'none';
+        document.getElementById('revenueView').style.display = 'block';
+        renderRevenueView();
+      } else if (mode === 'gross') {
+        document.getElementById('tabGross').classList.add('active');
+        document.getElementById('territoryBanner').style.display = 'none';
+        document.getElementById('revenueView').style.display = 'block';
+        renderRevenueView();
+      } else if (mode === 'ge') {
+        document.getElementById('tabGe').classList.add('active');
+        document.getElementById('territoryBanner').style.display = 'none';
+        document.getElementById('geView').style.display = 'block';
+        renderGeView();
+      } else if (mode === 'quota') {
+        document.getElementById('tabQuota').classList.add('active');
+        document.getElementById('territoryBanner').style.display = nalBuckets.length ? 'block' : 'none';
+        document.getElementById('quotaView').style.display = 'block';
+        renderQuotaView();
+      } else if (mode === 'agent') {
+        document.getElementById('tabAgent').classList.add('active');
+        document.getElementById('territoryBanner').style.display = 'none';
+        document.getElementById('agentView').style.display = 'block';
+        initProjectWorkbench();
+      }
+    }
+
+    function updateLoadingProgress(pct, mainText, chipId, chipDoneLabel) {
+      var pctEl = document.getElementById('loadingPctText');
+      var barEl = document.getElementById('loadingBarFill');
+      var topBarWrap = document.getElementById('topProgressBarWrap');
+      var topBarFill = document.getElementById('topProgressBarFill');
+      var mainTextEl = document.getElementById('loadingMainText');
+      if (pctEl) pctEl.textContent = pct + '%';
+      if (barEl) barEl.style.width = pct + '%';
+      if (topBarWrap) topBarWrap.style.display = 'block';
+      if (topBarFill) topBarFill.style.width = pct + '%';
+      if (mainText && mainTextEl) mainTextEl.textContent = mainText;
+      if (chipId && chipDoneLabel) {
+        var chip = document.getElementById(chipId);
+        if (chip) {
+          chip.classList.remove('active');
+          chip.classList.add('done');
+          chip.textContent = '✅ ' + chipDoneLabel;
+        }
+      }
+    }
+
+    function resetStepChips() {
+      var defs = [
+        ['stepChipOverview', '⏳ 1. 领地总览 KPI'],
+        ['stepChipQuota', '⏳ 2. 三大桶 Quota 对账'],
+        ['stepChipScorecard', '⏳ 3. NAL 与客户计分卡'],
+        ['stepChipMonthly', '⏳ 4. 自然月 MRR 走势'],
+        ['stepChipGe', '⏳ 5. GE 签约订单明细']
+      ];
+      defs.forEach(function(pair) {
+        var chip = document.getElementById(pair[0]);
+        if (chip) {
+          chip.classList.remove('done');
+          chip.classList.add('active');
+          chip.textContent = pair[1];
+        }
+      });
+    }
+
+    async function loadAllData(forceRefresh) {
+      var loadingPanel = document.getElementById('dataLoadingPanel');
+      var revView = document.getElementById('revenueView');
+      var terrBanner = document.getElementById('territoryBanner');
+
+      // 1. Check Frontend LocalStorage Snapshot Cache (0ms Instant Render on Refresh)
+      if (!forceRefresh) {
+        try {
+          var rawCache = localStorage.getItem(PORTAL_CACHE_KEY);
+          if (rawCache) {
+            var cached = JSON.parse(rawCache);
+            var ageMs = Date.now() - (cached.ts || 0);
+            if (cached && cached.schema === 'v2.1' && ageMs < PORTAL_CACHE_TTL_MS && cached.overviewData) {
+              if (cached.user) {
+                document.getElementById('userEmail').textContent = cached.user;
+                syncAdminLink(cached.user, cached.user.toLowerCase() === 'liuchenggang@google.com');
+              }
+              overviewData = cached.overviewData;
+              nalBuckets = cached.nalBuckets || [];
+              quarterlyQuotas = cached.quarterlyQuotas || [];
+              window.quotaMetadata = cached.quotaMetadata || {};
+              rawScorecard = cached.rawScorecard || [];
+              nalScorecard = cached.nalScorecard || [];
+              monthlyData = cached.monthlyData || [];
+              geData = cached.geData || [];
+              geNalData = cached.geNalData || [];
+              geMonthlyData = cached.geMonthlyData || [];
+
+              populateNalSelect(nalScorecard);
+              populateCustomerSelect(rawScorecard);
+              renderTerritoryBanner();
+              if (loadingPanel) loadingPanel.style.display = 'none';
+              var topBarWrap = document.getElementById('topProgressBarWrap');
+              if (topBarWrap) topBarWrap.style.display = 'none';
+              switchMode(currentMode || 'rvp');
+              _hasCompletedInitialRender = true;
+              trackAuditEvent('PAGE_VIEW', '/', '进入并加载主看板 (命中浏览器本地缓存 0ms)');
+
+              var ageMin = Math.max(1, Math.round(ageMs / 60000));
+              updateCacheBadge('⚡ 本地缓存秒开 (' + ageMin + '分钟前) · 🔄 强制刷新', true);
+
+              // Background Stale-While-Revalidate (SWR) lightweight check
+              authFetch('/api/cache/status').then(r => r.json()).then(st => {
+                var serverMeta = (st && st.metadata) || {};
+                var localMeta = window.quotaMetadata || {};
+                if (serverMeta.last_updated_cst && localMeta.last_updated_cst &&
+                    serverMeta.last_updated_cst !== localMeta.last_updated_cst) {
+                  console.log('Detected newer BigQuery table snapshot on backend, refreshing...');
+                  loadAllData(true);
+                }
+              }).catch(function() {});
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn('Cache read failed:', e);
+        }
+      }
+
+      // 2. Cache Miss or Forced Refresh: Show 5-Step Progress Panel & Fetch from Backend
+      resetStepChips();
+      if (loadingPanel) loadingPanel.style.display = 'block';
+      if (revView) revView.style.display = 'none';
+      if (terrBanner) terrBanner.style.display = 'none';
+
+      var qs = forceRefresh ? '?refresh=1' : '';
+      var completedCount = 0;
+      function markStepDone(chipId, chipDoneLabel, statusMsg) {
+        completedCount += 1;
+        var pct = Math.min(95, 10 + completedCount * 17);
+        updateLoadingProgress(pct, statusMsg, chipId, chipDoneLabel);
+      }
+
+      updateLoadingProgress(12, forceRefresh
+        ? '正在穿透缓存，从 BigQuery 强制重新计算 2026 收入、Run Rate 与三大桶 Quota 对账数据...'
+        : '正在加载并缓存 2026 收入、Run Rate 与三大桶 Quota 对账数据...');
+
+      try {
+        var currentUserEmail = '';
+        var pOv = authFetch('/api/overview' + qs).then(r => r.json()).then(ov => {
+          if (ov.user) {
+            currentUserEmail = ov.user;
+            document.getElementById('userEmail').textContent = ov.user;
+            syncAdminLink(ov.user, ov.is_admin);
+          }
+          overviewData = ov.data;
+          markStepDone('stepChipOverview', '1. 领地总览 KPI 已就绪', '已完成领地总览 KPI 计算，继续同步其余模块...');
+          return ov;
+        });
+
+        var pQt = authFetch('/api/quota-attainment' + qs).then(r => r.json()).then(qt => {
+          nalBuckets = qt.nal_buckets || [];
+          quarterlyQuotas = qt.quarterly_quotas || [];
+          window.quotaMetadata = qt.metadata || {};
+          markStepDone('stepChipQuota', '2. 三大桶 Quota 对账已就绪', '已完成三大桶 Quota 与 Rainmaker 对账数据加载...');
+          return qt;
+        });
+
+        var pSc = authFetch('/api/scorecard' + qs).then(r => r.json()).then(sc => {
+          rawScorecard = sc.rows || [];
+          nalScorecard = sc.nal_rows || [];
+          populateNalSelect(nalScorecard);
+          populateCustomerSelect(rawScorecard);
+          markStepDone('stepChipScorecard', '3. NAL 与客户计分卡已就绪', '已完成 12 个 NAL 与 238 家重点客户计分卡汇总...');
+          return sc;
+        });
+
+        var pMo = authFetch('/api/monthly' + qs).then(r => r.json()).then(mo => {
+          monthlyData = mo.months || [];
+          markStepDone('stepChipMonthly', '4. 自然月 MRR 走势已就绪', '已完成自然月 MRR 与产品支柱趋势计算...');
+          return mo;
+        });
+
+        var pGe = authFetch('/api/ge-stats' + qs).then(r => r.json()).then(ge => {
+          geData = ge.ge_items || [];
+          geNalData = ge.ge_nal_items || [];
+          geMonthlyData = ge.ge_monthly || [];
+          markStepDone('stepChipGe', '5. GE 签约订单明细已就绪', '已完成 Gemini Enterprise 签约订单数据加载...');
+          return ge;
+        });
+
+        await Promise.all([pOv, pQt, pSc, pMo, pGe]);
+
+        // Save snapshot into Frontend LocalStorage Cache
+        try {
+          localStorage.setItem(PORTAL_CACHE_KEY, JSON.stringify({
+            schema: 'v2.1',
+            ts: Date.now(),
+            user: currentUserEmail || document.getElementById('userEmail').textContent,
+            overviewData: overviewData,
+            nalBuckets: nalBuckets,
+            quarterlyQuotas: quarterlyQuotas,
+            quotaMetadata: window.quotaMetadata,
+            rawScorecard: rawScorecard,
+            nalScorecard: nalScorecard,
+            monthlyData: monthlyData,
+            geData: geData,
+            geNalData: geNalData,
+            geMonthlyData: geMonthlyData
+          }));
+          updateCacheBadge('⚡ 已写入本地缓存 (刚刚) · 🔄 强制刷新', true);
+        } catch (cacheErr) {
+          console.warn('Failed to write localStorage cache:', cacheErr);
+          updateCacheBadge('⚡ 后端缓存加速中 · 🔄 刷新数据', true);
+        }
+
+        updateLoadingProgress(100, '全部数据计算完成，正在渲染看板...');
+        renderTerritoryBanner();
+        if (loadingPanel) loadingPanel.style.display = 'none';
+        var topBarWrap = document.getElementById('topProgressBarWrap');
+        if (topBarWrap) {
+          setTimeout(function() { topBarWrap.style.display = 'none'; }, 350);
+        }
+        switchMode(currentMode || 'rvp'); // Render active mode
+        _hasCompletedInitialRender = true;
+        trackAuditEvent('PAGE_VIEW', '/', forceRefresh ? '强制刷新并重新加载主看板' : '进入并加载主看板');
+      } catch (e) {
+        console.error("Data load error:", e);
+        var mainTextEl = document.getElementById('loadingMainText');
+        if (mainTextEl) mainTextEl.textContent = '数据加载遇到异常，请刷新页面重试。';
+      }
+    }
+
+    function computeTerritoryTotals() {
+      var t = {
+        gcp_py: 0, gcp_total_q: 0, gcp_irev_q: 0, gcp_total_act: 0, gcp_irev_act: 0,
+        dadbai_py: 0, dadbai_total_q: 0, dadbai_irev_q: 0, dadbai_total_act: 0, dadbai_irev_act: 0,
+        ge_q: 0, ge_act: 0, ge_signed: 0
+      };
+      nalBuckets.forEach(r => {
+        t.gcp_py += (r.gcp_py_baseline || 0);
+        t.gcp_total_q += (r.gcp_total_quota || 0);
+        t.gcp_irev_q += (r.gcp_irev_quota || 0);
+        t.gcp_total_act += (r.gcp_total_actuals || 0);
+        t.gcp_irev_act += (r.gcp_irev_actuals || 0);
+
+        t.dadbai_py += (r.dadbai_py_baseline || 0);
+        t.dadbai_total_q += (r.dadbai_total_quota || 0);
+        t.dadbai_irev_q += (r.dadbai_irev_quota || 0);
+        t.dadbai_total_act += (r.dadbai_total_actuals || 0);
+        t.dadbai_irev_act += (r.dadbai_irev_actuals || 0);
+
+        t.ge_q += (r.ge_net_acv_quota || 0);
+        t.ge_act += (r.ge_net_acv_actuals || 0);
+        t.ge_signed += (r.ge_signed_bookings_acv || 0);
+      });
+      t.gcp_irev_pct = t.gcp_irev_q > 0 ? (t.gcp_irev_act / t.gcp_irev_q) * 100 : 0;
+      t.gcp_total_pct = t.gcp_total_q > 0 ? (t.gcp_total_act / t.gcp_total_q) * 100 : 0;
+      t.dadbai_irev_pct = t.dadbai_irev_q > 0 ? (t.dadbai_irev_act / t.dadbai_irev_q) * 100 : 0;
+      t.dadbai_total_pct = t.dadbai_total_q > 0 ? (t.dadbai_total_act / t.dadbai_total_q) * 100 : 0;
+      t.ge_pct = t.ge_q > 0 ? (t.ge_act / t.ge_q) * 100 : 0;
+      return t;
+    }
+
+    function renderTerritoryBanner() {
+      if (!nalBuckets || nalBuckets.length === 0) return;
+      var t = computeTerritoryTotals();
+      var qm = window.quotaMetadata || {};
+      var elapsedDays = qm.elapsed_days || 282;
+      var prorated = Number(((elapsedDays / 365.0) * 100).toFixed(1));
+      var bDate = qm.latest_billing_date || '2026-10-09';
+      var rmDate = qm.rainmaker_as_of_date || '2026-10-11';
+      var syncStr = qm.last_updated_cst || qm.last_updated_date || '2026-10-12';
+
+      var bProratedEl = document.getElementById('bannerProratedBadge');
+      if (bProratedEl) bProratedEl.textContent = `日历时间进度基准: ${prorated}% (${elapsedDays}/365天)`;
+      var bCutoffEl = document.getElementById('bannerCutoffBadge');
+      if (bCutoffEl) bCutoffEl.textContent = `🕒 消费出账截止: ${bDate} (对齐 Rainmaker ${rmDate})`;
+      var bSyncEl = document.getElementById('bannerLastSyncText');
+      if (bSyncEl) bSyncEl.textContent = `数据更新: ${syncStr}`;
+
+      var cards = [
+        {
+          title: '桶 1: GCP iRevenue (增量营收)',
+          badge: '全量达成 ' + t.gcp_total_pct.toFixed(1) + '%',
+          pct: t.gcp_irev_pct,
+          act: fmtCompactUSD(t.gcp_irev_act),
+          quota: fmtCompactUSD(t.gcp_irev_q),
+          subLeft: '达成: ' + fmtUSD2(t.gcp_irev_act) + ' / ' + fmtUSD(t.gcp_irev_q),
+          subRight: '25年基线: ' + fmtCompactUSD(t.gcp_py)
+        },
+        {
+          title: '桶 2: DA, DB & Cloud AI iRevenue',
+          badge: '全量达成 ' + t.dadbai_total_pct.toFixed(1) + '%',
+          pct: t.dadbai_irev_pct,
+          act: fmtCompactUSD(t.dadbai_irev_act),
+          quota: fmtCompactUSD(t.dadbai_irev_q),
+          subLeft: '达成: ' + fmtUSD2(t.dadbai_irev_act) + ' / ' + fmtUSD(t.dadbai_irev_q),
+          subRight: '25年基线: ' + fmtCompactUSD(t.dadbai_py)
+        },
+        {
+          title: '桶 3: Gemini Enterprise Net ACV (签约)',
+          badge: '客户签约 ' + fmtUSD2(t.ge_signed),
+          pct: t.ge_pct,
+          act: fmtUSD2(t.ge_act),
+          quota: fmtUSD(t.ge_q),
+          subLeft: '距全年差额: ' + fmtUSD2(t.ge_q - t.ge_act),
+          subRight: '12个NAL × $120K'
+        }
+      ];
+
+      var grid = document.getElementById('territoryBucketsGrid');
+      grid.innerHTML = '';
+      cards.forEach(c => {
+        var barColor = c.pct >= 100 ? '#1e8e3e' : (c.pct >= prorated ? '#1a73e8' : '#e37400');
+        var fillW = Math.min(Math.max(c.pct, 0), 100).toFixed(1);
+        var div = document.createElement('div');
+        div.className = 'bucket-card' + (c.pct >= prorated ? ' highlight' : '');
+        div.innerHTML = `
+          <div class="bucket-head">
+            <div class="bucket-name">${c.title}</div>
+            <span class="bucket-weight">${c.badge}</span>
+          </div>
+          <div class="bucket-nums">
+            <div class="bucket-pct" style="color:${barColor};">${c.pct.toFixed(2)}%</div>
+            <div class="bucket-amts"><strong>${c.act}</strong> / ${c.quota}</div>
+          </div>
+          <div class="progress-track" title="黑色竖线代表日历时间进度基准 (76.4%)">
+            <div class="progress-fill" style="width:${fillW}%; background:${barColor};"></div>
+            <div class="progress-marker" style="left:${prorated}%;"></div>
+          </div>
+          <div class="bucket-foot">
+            <span>${c.subLeft}</span>
+            <span>${c.subRight}</span>
+          </div>
+        `;
+        grid.appendChild(div);
+      });
+    }
+
+    function renderRevenueView() {
+      var d = overviewData;
+      if (!d) return;
+
+      var isRvp = (currentMode === 'rvp');
+      var prefix = isRvp ? 'RVP' : 'Gross';
+
+      document.getElementById('kpiTitleGcp').textContent = isRvp ? '2026 YTD GCP 销售认账 (RVP)' : '2026 YTD GCP 毛消费出账 (Gross)';
+      document.getElementById('kpiGcpVal').textContent = fmtUSD(isRvp ? d.total_gcp_rvp : d.total_gcp_gross);
+      document.getElementById('kpiGcpDrr').textContent = fmtUSD(isRvp ? d.latest_gcp_rvp_drr : d.latest_gcp_gross_drr) + ' /天';
+
+      document.getElementById('kpiTitleAi').textContent = isRvp ? '2026 YTD Cloud AI 认账 (RVP)' : '2026 YTD Cloud AI 毛出账 (Gross)';
+      document.getElementById('kpiAiVal').textContent = fmtUSD(isRvp ? d.total_cloud_ai_rvp : d.total_cloud_ai_gross);
+      var gcpBase = isRvp ? d.total_gcp_rvp : d.total_gcp_gross;
+      var aiVal = isRvp ? d.total_cloud_ai_rvp : d.total_cloud_ai_gross;
+      document.getElementById('kpiAiPct').textContent = ((aiVal / gcpBase) * 100).toFixed(1) + '%';
+
+      document.getElementById('kpiTitleDa').textContent = isRvp ? '2026 YTD DA 认账 (RVP)' : '2026 YTD DA 毛出账 (Gross)';
+      document.getElementById('kpiDaVal').textContent = fmtUSD(isRvp ? d.total_da_rvp : d.total_da_gross);
+      document.getElementById('kpiDaDrr').textContent = fmtUSD(isRvp ? d.latest_da_rvp_drr : d.latest_da_gross_drr) + ' /天';
+
+      document.getElementById('kpiTitleDb').textContent = isRvp ? '2026 YTD DB 认账 (RVP)' : '2026 YTD DB 毛出账 (Gross)';
+      document.getElementById('kpiDbVal').textContent = fmtUSD(isRvp ? d.total_db_rvp : d.total_db_gross);
+      document.getElementById('kpiDbDrr').textContent = fmtUSD(isRvp ? d.latest_db_rvp_drr : d.latest_db_gross_drr) + ' /天';
+
+      document.getElementById('kpiTitleMrr').textContent = isRvp ? '10月自然月 MTD Run Rate (RVP)' : '10月自然月 MTD Run Rate (Gross)';
+      document.getElementById('kpiMrrVal').textContent = fmtUSD(isRvp ? d.current_month_gcp_rvp_mrr : d.current_month_gcp_gross_mrr);
+      document.getElementById('kpiPriorMrr').textContent = fmtUSD(isRvp ? d.prior_month_gcp_rvp_mrr : d.prior_month_gcp_gross_mrr);
+
+      document.getElementById('chartTitle').textContent = isRvp
+        ? '📈 2026 年自然月度 Monthly Run Rate (MRR) 走势 (RVP 认账口径 · GCP / AI / DA / DB)'
+        : '📈 2026 年自然月度 Monthly Run Rate (MRR) 走势 (Gross 毛消费口径 · GCP / AI / DA / DB)';
+
+      document.getElementById('nalTableTitle').textContent = isRvp
+        ? '🏢 第一层汇总：按 NAL 维度汇总三大考核桶与 Run Rate 完成情况 (RVP 认账口径)'
+        : '🏢 第一层汇总：按 NAL 维度汇总各产品线与 Run Rate 消费情况 (Gross 毛消费口径)';
+
+      document.getElementById('tableTitle').textContent = isRvp
+        ? '📋 第二层明细：按客户 (Account) 维度汇总三大考核桶与 Run Rate 计分卡 (RVP 认账口径)'
+        : '📋 第二层明细：按客户 (Account) 维度汇总各产品线与 Run Rate 计分卡 (Gross 毛消费口径)';
+
+      renderMonthlyChart();
+      renderNalScorecardTable();
+      renderScorecardHeader();
+      filterTable();
+
+      if (nalScorecard.length > 0) {
+        var selNal = currentSelectedNal || document.getElementById('selectNal').value || nalScorecard[0].nal_name;
+        loadNalTrend(selNal, false);
+      }
+      if (rawScorecard.length > 0) {
+        var selCust = currentSelectedCustomer || document.getElementById('selectCustomer').value || rawScorecard[0].reporting_id;
+        loadCustomerTrend(selCust, false);
+      }
+    }
+
+    function flashChartCard(cardId) {
+      var el = document.getElementById(cardId);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.remove('flash-focus');
+      void el.offsetWidth;
+      el.classList.add('flash-focus');
+      setTimeout(function() { el.classList.remove('flash-focus'); }, 1400);
+    }
+
+    function populateNalSelect(rows) {
+      var sel = document.getElementById('selectNal');
+      sel.innerHTML = '';
+      var optAll = document.createElement('option');
+      optAll.value = 'ALL';
+      optAll.textContent = '🏆 MANU 领地全部 12 个 NAL 整体汇总';
+      sel.appendChild(optAll);
+      rows.forEach(r => {
+        var opt = document.createElement('option');
+        opt.value = r.nal_name;
+        opt.textContent = r.nal_name + ' (RVP: ' + fmtUSD(r.total_gcp_rvp_rev) + ')';
+        sel.appendChild(opt);
+      });
+      if (rows.length > 0) {
+        currentSelectedNal = rows[0].nal_name;
+        sel.value = currentSelectedNal;
+      }
+    }
+
+    async function loadNalTrend(nalName, scrollToChart) {
+      if (!nalName) return;
+      currentSelectedNal = nalName;
+      var sel = document.getElementById('selectNal');
+      if (sel) sel.value = nalName;
+
+      // Update active row highlight in NAL table
+      var nalRows = document.querySelectorAll('#nalScorecardBody tr');
+      nalRows.forEach(tr => {
+        if (tr.getAttribute('data-nal') === nalName) {
+          tr.classList.add('active-row');
+        } else {
+          tr.classList.remove('active-row');
+        }
+      });
+
+      var isRvp = (currentMode === 'rvp');
+      var prefix = isRvp ? 'RVP' : 'Gross';
+      var displayNal = (nalName === 'ALL') ? 'MANU 全领地汇总' : nalName;
+      document.getElementById('nalChartTitle').textContent = `📈 NAL 级别 2026 Daily Run Rate (DRR) 曲线走势 — ${displayNal} (${prefix})`;
+
+      if (scrollToChart) {
+        flashChartCard('nalDrilldownCard');
+        trackAuditEvent('DRILLDOWN', '/api/nal-trend', '查看 NAL 每日 DRR 趋势曲线: ' + displayNal);
+      }
+
+      var data = _nalTrendCache[nalName];
+      if (!data) {
+        var resp = await (await authFetch('/api/nal-trend?nal_name=' + encodeURIComponent(nalName))).json();
+        data = resp.trend || [];
+        _nalTrendCache[nalName] = data;
+        saveTrendCacheToSession();
+      }
+
+      var ctx = document.getElementById('nalChart').getContext('2d');
+      var labels = data.map(d => d.usage_date);
+      var gcpDrr = data.map(d => isRvp ? d.gcp_rvp_drr : d.gcp_gross_drr);
+      var aiDrr = data.map(d => isRvp ? d.cloud_ai_rvp_drr : d.cloud_ai_gross_drr);
+      var daDrr = data.map(d => isRvp ? d.da_rvp_drr : d.da_gross_drr);
+      var dbDrr = data.map(d => isRvp ? d.db_rvp_drr : d.db_gross_drr);
+
+      if (nalChartInst) nalChartInst.destroy();
+      nalChartInst = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'GCP DRR ($/天)', data: gcpDrr, borderColor: '#1a73e8', backgroundColor: 'rgba(26,115,232,0.08)', fill: true, tension: 0.2, pointRadius: 1.5 },
+            { label: 'Cloud AI DRR ($/天)', data: aiDrr, borderColor: '#9334e6', tension: 0.2, pointRadius: 1.5 },
+            { label: 'DA DRR ($/天)', data: daDrr, borderColor: '#12b5cb', tension: 0.2, pointRadius: 1.5 },
+            { label: 'DB DRR ($/天)', data: dbDrr, borderColor: '#e37400', tension: 0.2, pointRadius: 1.5 }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            x: { ticks: { maxTicksLimit: 14 } },
+            y: {
+              beginAtZero: true,
+              ticks: { callback: function(val) { return '$' + val.toLocaleString(); } }
+            }
+          },
+          plugins: {
+            tooltip: {
+              callbacks: {
+                label: function(c) { return c.dataset.label + ': ' + fmtUSD(c.raw); }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function filterByCurrentNal() {
+      var nalName = document.getElementById('selectNal').value;
+      if (!nalName || nalName === 'ALL') {
+        document.getElementById('searchInput').value = '';
+      } else {
+        document.getElementById('searchInput').value = nalName;
+      }
+      document.getElementById('nalFilter').value = '';
+      filterTable();
+      document.getElementById('scorecardTable').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function renderNalScorecardTable() {
+      var isRvp = (currentMode === 'rvp');
+      var prefix = isRvp ? 'RVP' : 'Gross';
+
+      // Build map from nalBuckets for Quota % columns and GE bookings
+      var quotaMap = {};
+      nalBuckets.forEach(b => { quotaMap[b.nal_name] = b; });
+      var geMap = {};
+      geNalData.forEach(g => { geMap[g.nal_name] = g; });
+
+      var head = document.getElementById('nalScorecardHeadRow');
+      head.innerHTML = `
+        <th>NAL 业务分组 (点击第一列查看 DRR 曲线 📈)</th>
+        <th class="text-num">出账客户数</th>
+        <th class="text-num">桶 1: GCP ${prefix} (YTD)</th>
+        ${isRvp ? '<th class="text-num">桶 1: iRev 达成率</th>' : ''}
+        <th class="text-num">桶 2 合计: DA+DB+AI ${prefix}</th>
+        ${isRvp ? '<th class="text-num">桶 2: iRev 达成率</th>' : ''}
+        <th class="text-num">其中: Cloud AI ${prefix}</th>
+        <th class="text-num">其中: DA ${prefix}</th>
+        <th class="text-num">其中: DB ${prefix}</th>
+        <th class="text-num">桶 3: GE 认账 Net ACV</th>
+        <th class="text-num">最新单日 DRR</th>
+        <th class="text-num">10月自然月 MTD MRR</th>
+        <th class="text-num">9月全月 MRR</th>
+      `;
+
+      document.getElementById('nalCountPill').textContent = nalScorecard.length + ' 个 NAL';
+      var tbody = document.getElementById('nalScorecardBody');
+      tbody.innerHTML = '';
+
+      nalScorecard.forEach(r => {
+        var gcpVal = isRvp ? r.total_gcp_rvp_rev : r.total_gcp_gross_rev;
+        var dadbaiVal = isRvp ? r.total_dadbai_rvp_rev : r.total_dadbai_gross_rev;
+        var aiVal = isRvp ? r.total_cloud_ai_rvp_rev : r.total_cloud_ai_gross_rev;
+        var daVal = isRvp ? r.total_da_rvp_rev : r.total_da_gross_rev;
+        var dbVal = isRvp ? r.total_db_rvp_rev : r.total_db_gross_rev;
+        var drr = isRvp ? r.latest_gcp_rvp_drr : r.latest_gcp_gross_drr;
+        var mrrCurr = isRvp ? r.current_month_gcp_rvp_mrr : r.current_month_gcp_gross_mrr;
+        var mrrPrior = isRvp ? r.prior_month_gcp_rvp_mrr : r.prior_month_gcp_gross_mrr;
+
+        var qb = quotaMap[r.nal_name] || {};
+        var geNetAcv = qb.ge_net_acv_actuals || (geMap[r.nal_name] && geMap[r.nal_name].net_iacv) || 0;
+        var gcpPctHtml = '';
+        var dadbaiPctHtml = '';
+        if (isRvp) {
+          var gcpPct = qb.gcp_irev_attainment_pct || 0;
+          var dadbaiPct = qb.dadbai_irev_attainment_pct || 0;
+          gcpPctHtml = `<td class="text-num"><span class="pill ${gcpPct >= 76.4 ? 'pill-green' : 'pill-blue'}">${gcpPct.toFixed(1)}%</span></td>`;
+          dadbaiPctHtml = `<td class="text-num"><span class="pill ${dadbaiPct >= 76.4 ? 'pill-green' : 'pill-purple'}">${dadbaiPct.toFixed(1)}%</span></td>`;
+        }
+
+        var tr = document.createElement('tr');
+        tr.setAttribute('data-nal', r.nal_name);
+        if (r.nal_name === currentSelectedNal) tr.className = 'active-row';
+        tr.innerHTML = `
+          <td class="clickable-col" onclick="loadNalTrend('${r.nal_name}', true)" title="点击查看 ${r.nal_name} 的 2026 每日 Run Rate (DRR) 曲线走势">
+            <span class="trend-link-wrap">
+              <span class="trend-badge">📈 曲线</span>
+              <span>${r.nal_name}</span>
+            </span>
+          </td>
+          <td class="text-num">${r.accounts_count} 家</td>
+          <td class="text-num"><strong>${fmtUSD(gcpVal)}</strong></td>
+          ${gcpPctHtml}
+          <td class="text-num" style="color:var(--google-purple);font-weight:700;">${fmtUSD(dadbaiVal)}</td>
+          ${dadbaiPctHtml}
+          <td class="text-num" style="color:var(--google-purple);">${fmtUSD(aiVal)}</td>
+          <td class="text-num" style="color:#12b5cb;">${fmtUSD(daVal)}</td>
+          <td class="text-num" style="color:var(--google-orange);">${fmtUSD(dbVal)}</td>
+          <td class="text-num" style="color:#e91e63;font-weight:600;">${fmtUSD2(geNetAcv)}</td>
+          <td class="text-num">${fmtUSD(drr)}</td>
+          <td class="text-num" style="font-weight:500;">${fmtUSD(mrrCurr)}</td>
+          <td class="text-num" style="color:var(--text-secondary);">${fmtUSD(mrrPrior)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderMonthlyChart() {
+      var ctx = document.getElementById('monthlyChart').getContext('2d');
+      var labels = monthlyData.map(m => m.year_month);
+      var isRvp = (currentMode === 'rvp');
+
+      var gcpData = monthlyData.map(m => isRvp ? m.gcp_rvp_mrr : m.gcp_gross_mrr);
+      var aiData = monthlyData.map(m => isRvp ? m.cloud_ai_rvp_mrr : m.cloud_ai_gross_mrr);
+      var daData = monthlyData.map(m => isRvp ? m.da_rvp_mrr : m.da_gross_mrr);
+      var dbData = monthlyData.map(m => isRvp ? m.db_rvp_mrr : m.db_gross_mrr);
+
+      if (monthlyChartInst) monthlyChartInst.destroy();
+      monthlyChartInst = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'GCP Total (' + (isRvp ? 'RVP' : 'Gross') + ')', data: gcpData, backgroundColor: 'rgba(26, 115, 232, 0.85)' },
+            { label: 'Cloud AI (' + (isRvp ? 'RVP' : 'Gross') + ')', data: aiData, backgroundColor: 'rgba(147, 52, 230, 0.85)' },
+            { label: 'DA Analytics (' + (isRvp ? 'RVP' : 'Gross') + ')', data: daData, backgroundColor: 'rgba(18, 181, 203, 0.85)' },
+            { label: 'DB Databases (' + (isRvp ? 'RVP' : 'Gross') + ')', data: dbData, backgroundColor: 'rgba(227, 116, 0, 0.85)' }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { callback: function(val) { return '$' + (val / 1e6).toFixed(1) + 'M'; } }
+            }
+          },
+          plugins: {
+            tooltip: {
+              callbacks: {
+                label: function(c) { return c.dataset.label + ': ' + fmtUSD(c.raw); }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderScorecardHeader() {
+      var isRvp = (currentMode === 'rvp');
+      var prefix = isRvp ? 'RVP' : 'Gross';
+      var head = document.getElementById('scorecardHeadRow');
+      head.innerHTML = `
+        <th>客户名称 (点击第一列查看 DRR 曲线 📈)</th>
+        <th>NAL 业务分组</th>
+        <th class="text-num">桶 1: GCP ${prefix} (YTD)</th>
+        <th class="text-num">桶 2 合计: DA+DB+AI ${prefix}</th>
+        <th class="text-num">Cloud AI ${prefix}</th>
+        <th class="text-num">DA ${prefix}</th>
+        <th class="text-num">DB ${prefix}</th>
+        <th class="text-num">AI 渗透率</th>
+        <th class="text-num">最新单日 DRR</th>
+        <th class="text-num">10月自然月 MTD MRR</th>
+        <th class="text-num">9月全月 MRR</th>
+      `;
+    }
+
+    function filterTable() {
+      var q = document.getElementById('searchInput').value.trim().toLowerCase();
+      var nal = document.getElementById('nalFilter').value.trim();
+      var isRvp = (currentMode === 'rvp');
+
+      var filtered = rawScorecard.filter(r => {
+        var matchQ = !q ||
+          (r.account_name && r.account_name.toLowerCase().includes(q)) ||
+          (r.reporting_id && r.reporting_id.toLowerCase().includes(q)) ||
+          (r.nal_name && r.nal_name.toLowerCase().includes(q));
+        var matchNal = !nal || (r.nal_name && r.nal_name.includes(nal));
+        return matchQ && matchNal;
+      });
+
+      document.getElementById('accountCountPill').textContent = filtered.length + ' 客户';
+
+      var tbody = document.getElementById('scorecardBody');
+      tbody.innerHTML = '';
+      filtered.forEach(r => {
+        var gcpYtd = isRvp ? r.total_gcp_rvp_rev : r.total_gcp_gross_rev;
+        var aiYtd = isRvp ? r.total_cloud_ai_rvp_rev : r.total_cloud_ai_gross_rev;
+        var daYtd = isRvp ? r.total_da_rvp_rev : r.total_da_gross_rev;
+        var dbYtd = isRvp ? r.total_db_rvp_rev : r.total_db_gross_rev;
+        var dadbaiYtd = (aiYtd || 0) + (daYtd || 0) + (dbYtd || 0);
+        var drr = isRvp ? r.latest_gcp_rvp_drr : r.latest_gcp_gross_drr;
+        var mrrCurr = isRvp ? r.current_month_gcp_rvp_mrr : r.current_month_gcp_gross_mrr;
+        var mrrPrior = isRvp ? r.prior_month_gcp_rvp_mrr : r.prior_month_gcp_gross_mrr;
+        var pct = isRvp ? r.cloud_ai_rvp_penetration_pct : r.cloud_ai_gross_penetration_pct;
+
+        var tr = document.createElement('tr');
+        tr.setAttribute('data-rep-id', r.reporting_id);
+        if (r.reporting_id === currentSelectedCustomer) tr.className = 'active-row';
+        var accDisplay = r.account_name || r.reporting_id;
+        tr.innerHTML = `
+          <td class="clickable-col" onclick="loadCustomerTrend('${r.reporting_id}', true)" title="点击查看 ${accDisplay} 的 2026 每日 Run Rate (DRR) 曲线走势">
+            <span class="trend-link-wrap">
+              <span class="trend-badge">📈 曲线</span>
+              <span>${accDisplay}</span>
+            </span>
+          </td>
+          <td><span class="pill pill-blue">${r.nal_name || '-'}</span></td>
+          <td class="text-num"><strong>${fmtUSD(gcpYtd)}</strong></td>
+          <td class="text-num" style="color:var(--google-purple);font-weight:700;">${fmtUSD(dadbaiYtd)}</td>
+          <td class="text-num" style="color:var(--google-purple);">${fmtUSD(aiYtd)}</td>
+          <td class="text-num" style="color:#12b5cb;">${fmtUSD(daYtd)}</td>
+          <td class="text-num" style="color:var(--google-orange);">${fmtUSD(dbYtd)}</td>
+          <td class="text-num"><span class="pill ${pct > 30 ? 'pill-purple' : 'pill-blue'}">${pct}%</span></td>
+          <td class="text-num">${fmtUSD(drr)}</td>
+          <td class="text-num" style="font-weight:500;">${fmtUSD(mrrCurr)}</td>
+          <td class="text-num" style="color:var(--text-secondary);">${fmtUSD(mrrPrior)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function populateCustomerSelect(rows) {
+      var sel = document.getElementById('selectCustomer');
+      sel.innerHTML = '';
+      rows.forEach(r => {
+        var opt = document.createElement('option');
+        opt.value = r.reporting_id;
+        opt.textContent = (r.account_name || r.reporting_id) + ' (RVP: ' + fmtUSD(r.total_gcp_rvp_rev) + ')';
+        sel.appendChild(opt);
+      });
+      if (rows.length > 0) {
+        currentSelectedCustomer = rows[0].reporting_id;
+        sel.value = currentSelectedCustomer;
+      }
+    }
+
+    async function loadCustomerTrend(reportingId, scrollToChart) {
+      if (!reportingId) return;
+      currentSelectedCustomer = reportingId;
+      document.getElementById('customerDrilldownCard').style.display = 'block';
+      document.getElementById('selectCustomer').value = reportingId;
+
+      // Update active row highlight in Account table
+      var accRows = document.querySelectorAll('#scorecardBody tr');
+      accRows.forEach(tr => {
+        if (tr.getAttribute('data-rep-id') === reportingId) {
+          tr.classList.add('active-row');
+        } else {
+          tr.classList.remove('active-row');
+        }
+      });
+
+      var custObj = rawScorecard.find(r => r.reporting_id === reportingId);
+      var custName = custObj ? (custObj.account_name || reportingId) : reportingId;
+      var isRvp = (currentMode === 'rvp');
+      var prefix = isRvp ? 'RVP' : 'Gross';
+
+      document.getElementById('customerChartTitle').textContent = `📈 客户 (Account) 级别 2026 Daily Run Rate (DRR) 曲线走势 — ${custName} (${prefix})`;
+
+      if (scrollToChart) {
+        flashChartCard('customerDrilldownCard');
+        trackAuditEvent('DRILLDOWN', '/api/customer-trend', '下钻查看客户每日 DRR 趋势曲线: ' + custName);
+      }
+
+      var data = _custTrendCache[reportingId];
+      if (!data) {
+        var resp = await (await authFetch('/api/customer-trend?reporting_id=' + encodeURIComponent(reportingId))).json();
+        data = resp.trend || [];
+        _custTrendCache[reportingId] = data;
+        saveTrendCacheToSession();
+      }
+
+      var ctx = document.getElementById('customerChart').getContext('2d');
+      var labels = data.map(d => d.usage_date);
+      var gcpDrr = data.map(d => isRvp ? d.gcp_rvp_drr : d.gcp_gross_drr);
+      var aiDrr = data.map(d => isRvp ? d.cloud_ai_rvp_drr : d.cloud_ai_gross_drr);
+      var daDrr = data.map(d => isRvp ? d.da_rvp_drr : d.da_gross_drr);
+      var dbDrr = data.map(d => isRvp ? d.db_rvp_drr : d.db_gross_drr);
+
+      if (customerChartInst) customerChartInst.destroy();
+      customerChartInst = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'GCP DRR ($/天)', data: gcpDrr, borderColor: '#1a73e8', backgroundColor: 'rgba(26,115,232,0.08)', fill: true, tension: 0.2, pointRadius: 1.5 },
+            { label: 'Cloud AI DRR ($/天)', data: aiDrr, borderColor: '#9334e6', tension: 0.2, pointRadius: 1.5 },
+            { label: 'DA DRR ($/天)', data: daDrr, borderColor: '#12b5cb', tension: 0.2, pointRadius: 1.5 },
+            { label: 'DB DRR ($/天)', data: dbDrr, borderColor: '#e37400', tension: 0.2, pointRadius: 1.5 }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            x: { ticks: { maxTicksLimit: 14 } },
+            y: {
+              beginAtZero: true,
+              ticks: { callback: function(val) { return '$' + val.toLocaleString(); } }
+            }
+          },
+          plugins: {
+            tooltip: {
+              callbacks: {
+                label: function(c) { return c.dataset.label + ': ' + fmtUSD(c.raw); }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderGeView() {
+      var sumSignedAcv = 0, sumSignedTcv = 0, sumNetIacv = 0, sumRenewalAcv = 0, sumSeats = 0, sumOrders = 0;
+      var uniqueCust = new Set();
+
+      geData.forEach(g => {
+        sumSignedAcv += (g.signed_acv || 0);
+        sumSignedTcv += (g.signed_tcv || 0);
+        sumNetIacv += (g.net_iacv || 0);
+        sumRenewalAcv += (g.comp_renewal_acv || 0);
+        sumSeats += (g.total_seats || 0);
+        sumOrders += (g.orders_count || 0);
+        if (g.reporting_id) uniqueCust.add(g.reporting_id);
+      });
+
+      var t = computeTerritoryTotals();
+      document.getElementById('geKpiSignedAcv').textContent = fmtUSD2(sumSignedAcv);
+      document.getElementById('geKpiSignedTcv').textContent = fmtUSD2(sumSignedTcv);
+      document.getElementById('geKpiNetIacv').textContent = fmtUSD2(sumNetIacv);
+      document.getElementById('geKpiRenewalAcv').textContent = fmtUSD2(sumRenewalAcv);
+      document.getElementById('geKpiCustCount').textContent = uniqueCust.size + ' 家签约客户';
+      document.getElementById('geKpiTotalSeats').textContent = sumSeats.toLocaleString() + ' 席';
+      document.getElementById('geKpiOrdersCount').textContent = sumOrders + ' 笔';
+
+      document.getElementById('geKpiNalAttained').textContent = fmtUSD2(t.ge_act);
+      document.getElementById('geKpiNalPct').textContent = t.ge_pct.toFixed(2) + '%';
+
+      renderGeMonthlyChart();
+      renderGeNalTable();
+      renderGeTable();
+    }
+
+    function jumpToNalTrend(nalName) {
+      if (currentMode !== 'rvp' && currentMode !== 'gross') {
+        currentSelectedNal = nalName;
+        switchMode('rvp');
+        setTimeout(function() { loadNalTrend(nalName, true); }, 80);
+      } else {
+        loadNalTrend(nalName, true);
+      }
+    }
+
+    function jumpToCustomerTrend(reportingId) {
+      if (currentMode !== 'rvp' && currentMode !== 'gross') {
+        currentSelectedCustomer = reportingId;
+        switchMode('rvp');
+        setTimeout(function() { loadCustomerTrend(reportingId, true); }, 80);
+      } else {
+        loadCustomerTrend(reportingId, true);
+      }
+    }
+
+    function renderGeNalTable() {
+      var geMap = {};
+      geNalData.forEach(g => { geMap[g.nal_name] = g; });
+
+      var tbody = document.getElementById('geNalTableBody');
+      tbody.innerHTML = '';
+
+      nalBuckets.forEach(b => {
+        var g = geMap[b.nal_name] || {};
+        var pct = b.ge_attainment_pct || 0;
+        var tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="clickable-col" onclick="jumpToNalTrend('${b.nal_name}')" title="点击查看 ${b.nal_name} 的 2026 每日 Run Rate (DRR) 曲线走势">
+            <span class="trend-link-wrap">
+              <span class="trend-badge">📈 曲线</span>
+              <span>${b.nal_name}</span>
+            </span>
+          </td>
+          <td class="text-num" style="color:var(--google-green);font-weight:700;">${fmtUSD2(b.ge_net_acv_actuals)}</td>
+          <td class="text-num">${fmtUSD(b.ge_net_acv_quota)}</td>
+          <td class="text-num"><span class="pill ${pct >= 76.4 ? 'pill-green' : (pct > 0 ? 'pill-blue' : 'pill-orange')}">${pct.toFixed(2)}%</span></td>
+          <td class="text-num">${g.customers_count || 0} 家</td>
+          <td class="text-num">${g.orders_count || 0} 笔</td>
+          <td class="text-num">${(g.total_seats || 0).toLocaleString()}</td>
+          <td class="text-num" style="color:var(--google-purple);font-weight:700;">${fmtUSD2(g.signed_acv || 0)}</td>
+          <td class="text-num" style="color:var(--google-blue);">${fmtUSD2(g.comp_new_acv || 0)}</td>
+          <td class="text-num" style="color:var(--google-green);">${fmtUSD2(g.comp_expansion_acv || 0)}</td>
+          <td class="text-num" style="color:var(--text-secondary);">${fmtUSD2(g.comp_renewal_acv || 0)}</td>
+          <td>${g.latest_booking_date || '-'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderGeMonthlyChart() {
+      var ctx = document.getElementById('geMonthlyChart').getContext('2d');
+      var labels = geMonthlyData.map(m => m.year_month);
+      var newAcv = geMonthlyData.map(m => m.comp_new_acv || 0);
+      var expAcv = geMonthlyData.map(m => m.comp_expansion_acv || 0);
+      var renAcv = geMonthlyData.map(m => m.comp_renewal_acv || 0);
+
+      if (geMonthlyChartInst) geMonthlyChartInst.destroy();
+      geMonthlyChartInst = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: '新签金额 (New ACV)', data: newAcv, backgroundColor: 'rgba(147, 52, 230, 0.85)' },
+            { label: '扩容金额 (Expansion ACV)', data: expAcv, backgroundColor: 'rgba(26, 115, 232, 0.85)' },
+            { label: '续约金额 (Renewal ACV)', data: renAcv, backgroundColor: 'rgba(30, 142, 62, 0.75)' }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { stacked: true },
+            y: {
+              stacked: true,
+              beginAtZero: true,
+              ticks: { callback: function(v) { return '$' + (v / 1e3).toFixed(0) + 'K'; } }
+            }
+          },
+          plugins: {
+            tooltip: {
+              callbacks: {
+                label: function(c) { return c.dataset.label + ': ' + fmtUSD2(c.raw); }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderGeTable() {
+      var q = (document.getElementById('geSearchInput').value || '').trim().toLowerCase();
+      var filtered = geData.filter(g => {
+        if (!q) return true;
+        return (g.account_name && g.account_name.toLowerCase().includes(q)) ||
+               (g.sku_description && g.sku_description.toLowerCase().includes(q)) ||
+               (g.nal_name && g.nal_name.toLowerCase().includes(q));
+      });
+
+      var tbody = document.getElementById('geTableBody');
+      tbody.innerHTML = '';
+      filtered.forEach(g => {
+        var tr = document.createElement('tr');
+        var accDisplay = g.account_name || g.reporting_id;
+        tr.innerHTML = `
+          <td class="clickable-col" onclick="jumpToCustomerTrend('${g.reporting_id}')" title="点击查看 ${accDisplay} 的 2026 每日 Run Rate (DRR) 曲线走势">
+            <span class="trend-link-wrap">
+              <span class="trend-badge">📈 曲线</span>
+              <span>${accDisplay}</span>
+            </span>
+          </td>
+          <td><span class="pill pill-blue">${g.nal_name || '-'}</span></td>
+          <td><span class="pill ${g.product_l3 === 'Gen AI FSP' ? 'pill-orange' : 'pill-purple'}">${g.product_l3 || '-'}</span></td>
+          <td style="max-width:300px; overflow:hidden; text-overflow:ellipsis;" title="${g.sku_description || ''}">${g.sku_description || '-'}</td>
+          <td class="text-num">${g.orders_count || 0} 笔 (${g.deal_lines || 0} 行)</td>
+          <td class="text-num">${(g.total_seats || 0).toLocaleString()}</td>
+          <td class="text-num">${fmtUSD2(g.signed_tcv)}</td>
+          <td class="text-num" style="color:var(--google-purple);font-weight:700;">${fmtUSD2(g.signed_acv)}</td>
+          <td class="text-num" style="color:var(--google-green);font-weight:700;">${fmtUSD2(g.net_iacv)}</td>
+          <td class="text-num" style="color:var(--google-blue);">${fmtUSD2(g.comp_new_acv)}</td>
+          <td class="text-num" style="color:var(--google-green);">${fmtUSD2(g.comp_expansion_acv)}</td>
+          <td class="text-num" style="color:var(--text-secondary);">${fmtUSD2(g.comp_renewal_acv)}</td>
+          <td>${g.latest_booking_date || '-'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderQuotaView() {
+      var t = computeTerritoryTotals();
+      var qm = window.quotaMetadata || {};
+      var elapsedDays = qm.elapsed_days || 282;
+      var prorated = Number(((elapsedDays / 365.0) * 100).toFixed(1));
+      var bDate = qm.latest_billing_date || '2026-10-09';
+      var rmDate = qm.rainmaker_as_of_date || '2026-10-11';
+      var geDate = qm.latest_ge_booking_date || '2026-10-08';
+      var syncStr = qm.last_updated_cst || '2026-10-12 (北京时间)';
+
+      var pBill = document.getElementById('quotaCutoffBillingPill');
+      if (pBill) pBill.textContent = `💵 桶1 & 桶2 消费出账截止日: ${bDate} (T-2 完整出账 · 对齐 Rainmaker ${rmDate})`;
+      var pGe = document.getElementById('quotaCutoffGePill');
+      if (pGe) pGe.textContent = `✨ 桶3 GE 签约截止日: 实时同步 (最新已签订单: ${geDate})`;
+      var pPro = document.getElementById('quotaCutoffProratedPill');
+      if (pPro) pPro.textContent = `📅 日历进度基准: ${prorated}% (${elapsedDays}/365天)`;
+      var pSync = document.getElementById('quotaLastUpdatedBadge');
+      if (pSync) pSync.textContent = `📌 BigQuery 表最后更新时间: ${syncStr}`;
+      var pSec1 = document.getElementById('quotaSec1CutoffPill');
+      if (pSec1) pSec1.textContent = `出账截止: ${bDate} | Rainmaker 校准日: ${rmDate}`;
+      var pSec2 = document.getElementById('quotaSec2CutoffPill');
+      if (pSec2) pSec2.textContent = `数据截止: ${bDate} (Rainmaker ${rmDate})`;
+
+      var overallBody = document.getElementById('overallThreeBucketsBody');
+      overallBody.innerHTML = '';
+
+      var summaryRows = [
+        {
+          name: '桶 1: GCP iRevenue (整体增量营收 · 含 INFRA_AI & 账户负值归零规则)',
+          py: t.gcp_py,
+          totQ: t.gcp_total_q,
+          irevQ: t.gcp_irev_q,
+          totAct: t.gcp_total_act,
+          irevAct: t.gcp_irev_act,
+          irevPct: t.gcp_irev_pct,
+          totPct: t.gcp_total_pct,
+          gap: t.gcp_irev_q - t.gcp_irev_act
+        },
+        {
+          name: '桶 2: DA, DB & Cloud AI iRevenue (核心增长引擎增量营收 · 含账户负值归零与封顶规则)',
+          py: t.dadbai_py,
+          totQ: t.dadbai_total_q,
+          irevQ: t.dadbai_irev_q,
+          totAct: t.dadbai_total_act,
+          irevAct: t.dadbai_irev_act,
+          irevPct: t.dadbai_irev_pct,
+          totPct: t.dadbai_total_pct,
+          gap: t.dadbai_irev_q - t.dadbai_irev_act
+        },
+        {
+          name: '桶 3: Gemini Enterprise Net ACV (go/rainmaker NETACV_MONTHLY: 100% GE + 10% FSP - 水位线冲减)',
+          py: 0,
+          totQ: t.ge_q,
+          irevQ: t.ge_q,
+          totAct: t.ge_signed,
+          irevAct: t.ge_act,
+          irevPct: t.ge_pct,
+          totPct: (t.ge_signed / t.ge_q) * 100,
+          gap: t.ge_q - t.ge_act
+        }
+      ];
+
+      summaryRows.forEach(r => {
+        var tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${r.name}</strong></td>
+          <td class="text-num" style="color:var(--google-green);font-weight:700;">${fmtUSD2(r.irevAct)}</td>
+          <td class="text-num"><strong>${fmtUSD2(r.irevQ)}</strong></td>
+          <td class="text-num"><span class="pill ${r.irevPct >= 76.4 ? 'pill-green' : 'pill-orange'}" style="font-size:13px;">${r.irevPct.toFixed(2)}%</span></td>
+          <td class="text-num">${r.gap > 0 ? fmtUSD2(r.gap) : '超额 ' + fmtUSD2(-r.gap)}</td>
+          <td class="text-num" style="color:var(--text-secondary);">${fmtUSD(r.py)}</td>
+          <td class="text-num" style="color:var(--google-blue);">${fmtUSD2(r.totAct)}</td>
+          <td class="text-num">${fmtUSD(r.totQ)}</td>
+          <td class="text-num"><strong>${r.totPct.toFixed(2)}%</strong></td>
+        `;
+        overallBody.appendChild(tr);
+      });
+
+      renderNalThreeBucketsTable();
+      renderQuarterlyQuotaTable();
+    }
+
+    function renderNalThreeBucketsTable() {
+      var mode = document.getElementById('nalBucketModeSelect').value; // 'irev' or 'total'
+      var isIrev = (mode === 'irev');
+      var head = document.getElementById('nalThreeBucketsHead');
+      head.innerHTML = `
+        <th>NAL 业务分组 (点击第一列查看 DRR 曲线 📈)</th>
+        <th class="text-num">桶1: GCP ${isIrev ? 'YTD iRev 实际达成' : 'YTD 全量达成'}</th>
+        <th class="text-num">桶1: GCP ${isIrev ? 'iRev Quota (目标)' : '全量 Quota'}</th>
+        <th class="text-num">桶1: 达成率</th>
+        <th class="text-num">桶2: DA+DB+AI ${isIrev ? 'YTD iRev 实际达成' : 'YTD 全量达成'}</th>
+        <th class="text-num">桶2: DA+DB+AI ${isIrev ? 'iRev Quota (目标)' : '全量 Quota'}</th>
+        <th class="text-num">桶2: 达成率</th>
+        <th class="text-num">桶3: GE Net ACV 达成 (Rainmaker)</th>
+        <th class="text-num">桶3: GE Net ACV Quota</th>
+        <th class="text-num">桶3: 客户签约 ACV (100%)</th>
+        <th class="text-num">桶3: 达成率</th>
+      `;
+
+      var tbody = document.getElementById('nalThreeBucketsBody');
+      tbody.innerHTML = '';
+
+      nalBuckets.forEach(r => {
+        var gcpQ = isIrev ? r.gcp_irev_quota : r.gcp_total_quota;
+        var gcpAct = isIrev ? r.gcp_irev_actuals : r.gcp_total_actuals;
+        var gcpPct = isIrev ? r.gcp_irev_attainment_pct : r.gcp_total_attainment_pct;
+
+        var dadbQ = isIrev ? r.dadbai_irev_quota : r.dadbai_total_quota;
+        var dadbAct = isIrev ? r.dadbai_irev_actuals : r.dadbai_total_actuals;
+        var dadbPct = isIrev ? r.dadbai_irev_attainment_pct : r.dadbai_total_attainment_pct;
+
+        var gePct = r.ge_attainment_pct || 0;
+
+        var tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="clickable-col" onclick="jumpToNalTrend('${r.nal_name}')" title="点击查看 ${r.nal_name} 的 2026 每日 Run Rate (DRR) 曲线走势">
+            <span class="trend-link-wrap">
+              <span class="trend-badge">📈 曲线</span>
+              <span>${r.nal_name}</span>
+            </span>
+          </td>
+          <td class="text-num" style="color:var(--google-blue);font-weight:700;">${fmtUSD2(gcpAct)}</td>
+          <td class="text-num">${fmtUSD(gcpQ)}</td>
+          <td class="text-num"><span class="pill ${gcpPct >= 76.4 ? 'pill-green' : 'pill-orange'}">${gcpPct.toFixed(2)}%</span></td>
+          <td class="text-num" style="color:var(--google-purple);font-weight:700;">${fmtUSD2(dadbAct)}</td>
+          <td class="text-num">${fmtUSD(dadbQ)}</td>
+          <td class="text-num"><span class="pill ${dadbPct >= 76.4 ? 'pill-green' : 'pill-orange'}">${dadbPct.toFixed(2)}%</span></td>
+          <td class="text-num" style="color:var(--google-green);font-weight:700;">${fmtUSD2(r.ge_net_acv_actuals)}</td>
+          <td class="text-num">${fmtUSD(r.ge_net_acv_quota)}</td>
+          <td class="text-num" style="color:#e91e63;">${fmtUSD2(r.ge_signed_bookings_acv)}</td>
+          <td class="text-num"><span class="pill ${gePct >= 76.4 ? 'pill-green' : (gePct > 0 ? 'pill-blue' : 'pill-orange')}">${gePct.toFixed(2)}%</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // Append Overall Territory Summary Row at bottom
+      var t = computeTerritoryTotals();
+      var totGcpQ = isIrev ? t.gcp_irev_q : t.gcp_total_q;
+      var totGcpAct = isIrev ? t.gcp_irev_act : t.gcp_total_act;
+      var totGcpPct = isIrev ? t.gcp_irev_pct : t.gcp_total_pct;
+
+      var totDadbQ = isIrev ? t.dadbai_irev_q : t.dadbai_total_q;
+      var totDadbAct = isIrev ? t.dadbai_irev_act : t.dadbai_total_act;
+      var totDadbPct = isIrev ? t.dadbai_irev_pct : t.dadbai_total_pct;
+
+      var sumTr = document.createElement('tr');
+      sumTr.className = 'summary-row';
+      sumTr.innerHTML = `
+        <td class="clickable-col" onclick="jumpToNalTrend('ALL')" title="点击查看 MANU 全领地 2026 每日 Run Rate (DRR) 曲线走势">
+          <span class="trend-link-wrap">
+            <span class="trend-badge">📈 曲线</span>
+            <span>🏆 MANU 领地整体合计 (12 个 NAL 总计)</span>
+          </span>
+        </td>
+        <td class="text-num">${fmtUSD2(totGcpAct)}</td>
+        <td class="text-num">${fmtUSD(totGcpQ)}</td>
+        <td class="text-num"><span class="pill pill-green">${totGcpPct.toFixed(2)}%</span></td>
+        <td class="text-num">${fmtUSD2(totDadbAct)}</td>
+        <td class="text-num">${fmtUSD(totDadbQ)}</td>
+        <td class="text-num"><span class="pill pill-green">${totDadbPct.toFixed(2)}%</span></td>
+        <td class="text-num">${fmtUSD2(t.ge_act)}</td>
+        <td class="text-num">${fmtUSD(t.ge_q)}</td>
+        <td class="text-num">${fmtUSD2(t.ge_signed)}</td>
+        <td class="text-num"><span class="pill pill-blue">${t.ge_pct.toFixed(2)}%</span></td>
+      `;
+      tbody.appendChild(sumTr);
+    }
+
+    function renderQuarterlyQuotaTable() {
+      var filter = document.getElementById('quotaProductFilter').value;
+      var tbody = document.getElementById('quarterlyQuotaBody');
+      tbody.innerHTML = '';
+
+      var rowsToRender = [];
+      if (filter === 'ALL_THREE') {
+        var coreProducts = ['GCP_CLASSIC_FIELD', 'AI_SOLUTIONS', 'ANALYTICS', 'MIGRATE_AND_MODERNIZE_DATABASES', 'AGENTSPACE'];
+        rowsToRender = quarterlyQuotas.filter(q => coreProducts.includes(q.product));
+      } else if (filter === 'ALL') {
+        rowsToRender = quarterlyQuotas;
+      } else {
+        rowsToRender = quarterlyQuotas.filter(q => q.product === filter);
+      }
+
+      rowsToRender.forEach(r => {
+        var revPct = r.total_rev_quota > 0 ? ((r.total_rev_actuals / r.total_rev_quota) * 100).toFixed(1) + '%' : '-';
+        var bkPct = r.bookings_quota > 0 ? ((r.bookings_actuals / r.bookings_quota) * 100).toFixed(1) + '%' : '';
+        var tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${r.product}</strong></td>
+          <td><span class="pill pill-blue">${r.quarter}</span></td>
+          <td class="text-num" style="color:var(--text-secondary);">${fmtUSD(r.prior_year_baseline)}</td>
+          <td class="text-num"><strong>${fmtUSD(r.total_rev_quota)}</strong></td>
+          <td class="text-num" style="color:var(--google-purple);">${fmtUSD(r.incremental_rev_quota)}</td>
+          <td class="text-num" style="color:var(--google-blue);font-weight:600;">${fmtUSD(r.total_rev_actuals)}</td>
+          <td class="text-num">${revPct}</td>
+          <td class="text-num">${r.bookings_quota > 0 ? fmtUSD(r.bookings_quota) : '-'}</td>
+          <td class="text-num">${r.bookings_actuals > 0 ? fmtUSD(r.bookings_actuals) + (bkPct ? ' (' + bkPct + ')' : '') : '-'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    /* ==================== Project Workbench & AI Data Analytics Agent Functions ==================== */
+    var agentHistory = [];
+    var agentSqlResultsStore = [];
+    var agentInlineCharts = {};
+    var topProjectsList = [];
+    var _projWorkbenchInitialized = false;
+    var currentProjectTrendPayload = null;
+    var projMrrChartInst = null;
+    var projDrrChartInst = null;
+    var _projTrendLocalCache = {};
+
+    async function initProjectWorkbench() {
+      if (_projWorkbenchInitialized && topProjectsList.length > 0) return;
+      _projWorkbenchInitialized = true;
+      try {
+        var r = await authFetch('/api/projects/top?limit=300');
+        var data = await r.json();
+        if (data && data.summary) {
+          var badge = document.getElementById('projTotalCountBadge');
+          if (badge) {
+            badge.textContent = '已治理 ' + (data.summary.named_projects_count || 5414).toLocaleString() +
+              ' 个 GCP Project · ' + (data.summary.ai_active_projects_count || 0) + ' 个含 AI 消费';
+          }
+        }
+        topProjectsList = (data && data.projects) || [];
+        populateProjectWorkbenchFilters();
+        if (topProjectsList.length > 0) {
+          await loadProjectCurveWorkbench(topProjectsList[0].project_id);
+        }
+      } catch (e) {
+        console.warn('initProjectWorkbench error:', e);
+      }
+    }
+
+    function populateProjectWorkbenchFilters() {
+      var custSel = document.getElementById('projCustomerFilter');
+      if (!custSel) return;
+      var custSet = {};
+      topProjectsList.forEach(p => {
+        if (p.account_name) {
+          custSet[p.account_name] = (custSet[p.account_name] || 0) + 1;
+        }
+      });
+      var custNames = Object.keys(custSet).sort((a, b) => custSet[b] - custSet[a]);
+      custSel.innerHTML = '<option value="">全部客户 (Top 300 GCP Projects)</option>';
+      custNames.forEach(cn => {
+        var opt = document.createElement('option');
+        opt.value = cn;
+        opt.textContent = cn + ' (' + custSet[cn] + ' Projects)';
+        custSel.appendChild(opt);
+      });
+      populateProjectDropdown('');
+    }
+
+    function populateProjectDropdown(customerFilter) {
+      var sel = document.getElementById('projSelectDropdown');
+      if (!sel) return;
+      sel.innerHTML = '';
+      var filtered = customerFilter
+        ? topProjectsList.filter(p => p.account_name === customerFilter)
+        : topProjectsList;
+      filtered.forEach((p, idx) => {
+        var opt = document.createElement('option');
+        opt.value = p.project_id;
+        var aiTag = p.total_cloud_ai_rvp_rev > 0 ? ' · AI ' + fmtCompactUSD(p.total_cloud_ai_rvp_rev) : '';
+        opt.textContent = '#' + (idx + 1) + ' ' + p.project_id + ' [' + p.account_name + '] — YTD ' + fmtCompactUSD(p.total_gcp_rvp_rev) + aiTag;
+        sel.appendChild(opt);
+      });
+    }
+
+    function onProjCustomerFilterChange() {
+      var cust = document.getElementById('projCustomerFilter').value;
+      populateProjectDropdown(cust);
+      var sel = document.getElementById('projSelectDropdown');
+      if (sel && sel.value) {
+        loadProjectCurveWorkbench(sel.value);
+      }
+    }
+
+    function searchCustomProjectCurve() {
+      var inp = document.getElementById('projCustomInput');
+      var q = (inp && inp.value || '').trim();
+      if (!q) return;
+      loadProjectCurveWorkbench(q);
+    }
+
+    async function loadProjectCurveWorkbench(projectId) {
+      var pid = (projectId || '').trim();
+      if (!pid) return;
+      var key = pid.toLowerCase();
+      try {
+        var payload = _projTrendLocalCache[key];
+        if (!payload) {
+          var r = await authFetch('/api/project-trend?project_id=' + encodeURIComponent(pid));
+          payload = await r.json();
+          if (payload && payload.found) {
+            _projTrendLocalCache[key] = payload;
+            if (payload.project && payload.project.project_id) {
+              _projTrendLocalCache[payload.project.project_id.toLowerCase()] = payload;
+            }
+          }
+        }
+        if (!payload || !payload.found) {
+          document.getElementById('pmProjectId').textContent = '未找到: ' + pid;
+          return;
+        }
+        currentProjectTrendPayload = payload;
+        var sel = document.getElementById('projSelectDropdown');
+        if (sel && payload.project && payload.project.project_id) {
+          for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value.toLowerCase() === payload.project.project_id.toLowerCase()) {
+              sel.selectedIndex = i;
+              break;
+            }
+          }
+        }
+        renderCurrentProjectCharts();
+      } catch (e) {
+        console.warn('loadProjectCurveWorkbench failed:', e);
+      }
+    }
+
+    function renderCurrentProjectCharts() {
+      if (!currentProjectTrendPayload || !currentProjectTrendPayload.found) return;
+      var p = currentProjectTrendPayload.project || {};
+      var mRows = currentProjectTrendPayload.monthly_mrr || [];
+      var dRows = currentProjectTrendPayload.daily_drr || [];
+      var mMode = (document.getElementById('projMetricModeSelect') && document.getElementById('projMetricModeSelect').value) || 'rvp';
+      var isRvp = (mMode === 'rvp');
+      var modeTag = isRvp ? 'RVP' : 'Gross';
+
+      document.getElementById('pmProjectId').textContent = p.project_id + (p.project_number ? ' (#' + p.project_number + ')' : '');
+      document.getElementById('pmProjectSub').textContent = 'Billing Account: ' + (p.billing_account_id || '-');
+      document.getElementById('pmAccountName').textContent = p.account_name || '-';
+      document.getElementById('pmNalName').textContent = p.nal_name || '-';
+      document.getElementById('pmYtdGcp').textContent = fmtUSD(isRvp ? p.total_gcp_rvp_rev : p.total_gcp_gross_rev) + ' (' + modeTag + ')';
+      document.getElementById('pmYtdGrossSub').textContent = (isRvp ? 'Gross: ' + fmtUSD(p.total_gcp_gross_rev) : 'RVP: ' + fmtUSD(p.total_gcp_rvp_rev)) + ' · 活跃 ' + (p.active_days || 0) + ' 天';
+      document.getElementById('pmYtdAi').textContent = fmtUSD(isRvp ? p.total_cloud_ai_rvp_rev : p.total_cloud_ai_gross_rev) + ' (' + (p.cloud_ai_rvp_penetration_pct || 0).toFixed(1) + '%)';
+      document.getElementById('pmYtdBucket2Sub').textContent = '桶2 DA+DB+AI: ' + fmtUSD(p.total_dadbai_rvp_rev);
+      document.getElementById('pmMrrComp').textContent = '9月 ' + fmtCompactUSD(p.prior_month_gcp_rvp_mrr) + ' → 10月 ' + fmtCompactUSD(p.current_month_gcp_rvp_mrr);
+      var momVal = p.drr_mom_growth_pct || 0;
+      document.getElementById('pmMomGrowthSub').textContent = '日均 DRR 环比: ' + (momVal >= 0 ? '+' : '') + momVal.toFixed(1) + '%';
+      document.getElementById('pmLatestDrr').textContent = fmtUSD(p.latest_gcp_rvp_drr) + '/天';
+      document.getElementById('pm7dAvgSub').textContent = '近7日日均: ' + fmtUSD(p.latest_7d_avg_gcp_rvp_drr) + '/天 · AI: ' + fmtUSD(p.latest_cloud_ai_rvp_drr) + '/天';
+
+      document.getElementById('projMrrChartTitle').textContent = '📊 Project [' + p.project_id + '] 2026 自然月度 MRR 走势 (' + modeTag + ')';
+      document.getElementById('projDrrChartTitle').textContent = '📈 Project [' + p.project_id + '] 2026 每日 DRR 曲线与 7日均线 (' + modeTag + ')';
+
+      // 1. Render Monthly MRR Chart
+      var ctxM = document.getElementById('projMrrCanvas').getContext('2d');
+      if (projMrrChartInst) projMrrChartInst.destroy();
+      projMrrChartInst = new Chart(ctxM, {
+        type: 'bar',
+        data: {
+          labels: mRows.map(x => x.year_month),
+          datasets: [
+            {
+              label: 'GCP ' + modeTag + ' MRR',
+              data: mRows.map(x => isRvp ? x.gcp_rvp_mrr : x.gcp_gross_mrr),
+              backgroundColor: 'rgba(26, 115, 232, 0.78)',
+              borderRadius: 4
+            },
+            {
+              label: 'Cloud AI ' + modeTag + ' MRR',
+              data: mRows.map(x => isRvp ? x.cloud_ai_rvp_mrr : x.cloud_ai_gross_mrr),
+              backgroundColor: 'rgba(147, 52, 230, 0.85)',
+              borderRadius: 4
+            },
+            {
+              label: 'DA + DB ' + modeTag + ' MRR',
+              data: mRows.map(x => (isRvp ? (x.da_rvp_mrr + x.db_rvp_mrr) : (x.da_gross_mrr + x.db_gross_mrr))),
+              backgroundColor: 'rgba(13, 148, 136, 0.80)',
+              borderRadius: 4
+            },
+            {
+              label: '当月日均 GCP DRR (右轴)',
+              type: 'line',
+              yAxisID: 'y1',
+              data: mRows.map(x => x.gcp_rvp_drr_avg || 0),
+              borderColor: '#f59e0b',
+              backgroundColor: '#f59e0b',
+              borderWidth: 2,
+              tension: 0.25,
+              pointRadius: 3
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { callback: v => fmtCompactUSD(v) }
+            },
+            y1: {
+              position: 'right',
+              beginAtZero: true,
+              grid: { drawOnChartArea: false },
+              ticks: { callback: v => fmtCompactUSD(v) + '/d' }
+            }
+          }
+        }
+      });
+
+      // 2. Render Daily DRR Curve Chart
+      var ctxD = document.getElementById('projDrrCanvas').getContext('2d');
+      if (projDrrChartInst) projDrrChartInst.destroy();
+      projDrrChartInst = new Chart(ctxD, {
+        type: 'line',
+        data: {
+          labels: dRows.map(x => x.usage_date),
+          datasets: [
+            {
+              label: 'GCP ' + modeTag + ' 单日 DRR',
+              data: dRows.map(x => isRvp ? x.gcp_rvp_drr : x.gcp_gross_drr),
+              borderColor: '#1a73e8',
+              backgroundColor: 'rgba(26, 115, 232, 0.08)',
+              borderWidth: 1.8,
+              pointRadius: 0,
+              fill: true,
+              tension: 0.2
+            },
+            {
+              label: 'Cloud AI ' + modeTag + ' 单日 DRR',
+              data: dRows.map(x => isRvp ? x.cloud_ai_rvp_drr : x.cloud_ai_gross_drr),
+              borderColor: '#9334e6',
+              backgroundColor: 'rgba(147, 52, 230, 0.12)',
+              borderWidth: 1.8,
+              pointRadius: 0,
+              fill: true,
+              tension: 0.2
+            },
+            {
+              label: 'DA + DB ' + modeTag + ' 单日 DRR',
+              data: dRows.map(x => isRvp ? (x.da_rvp_drr + x.db_rvp_drr) : (x.da_gross_drr + x.db_gross_drr)),
+              borderColor: '#0d9488',
+              borderWidth: 1.5,
+              pointRadius: 0,
+              fill: false,
+              tension: 0.2
+            },
+            {
+              label: 'GCP RVP 7日移动均线 (7d Avg)',
+              data: dRows.map(x => x.gcp_rvp_drr_7d_avg),
+              borderColor: '#ea580c',
+              borderDash: [4, 3],
+              borderWidth: 2,
+              pointRadius: 0,
+              fill: false,
+              tension: 0.25
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            x: { ticks: { maxTicksLimit: 10 } },
+            y: {
+              beginAtZero: true,
+              ticks: { callback: v => fmtCompactUSD(v) }
+            }
+          }
+        }
+      });
+    }
+
+    function askAiAboutCurrentProject() {
+      var pid = (currentProjectTrendPayload && currentProjectTrendPayload.project && currentProjectTrendPayload.project.project_id) || 'vivocloudai';
+      var acct = (currentProjectTrendPayload && currentProjectTrendPayload.project && currentProjectTrendPayload.project.account_name) || '';
+      var prompt = '请分析 GCP Project ID `' + pid + '`' + (acct ? '（所属客户：' + acct + '）' : '') +
+        ' 在 2026 年的月度 MRR 走势与近期每日 DRR 曲线（含 GCP、Cloud AI、DA、DB 拆解），指出其消费峰值、近期是否有爬坡或掉量趋势，并给出跟进建议。';
+      askAgentPreset(prompt);
+    }
+
+    /* ==================== Automatic Time-Series Curve Renderer Inside AI Chat Bubbles ==================== */
+    function detectTimeSeriesSpec(sq) {
+      if (!sq || !sq.rows || sq.rows.length < 2) return null;
+      var cols = (sq.columns && sq.columns.length) ? sq.columns : Object.keys(sq.rows[0]);
+      var timeCol = cols.find(c => /^(usage_date|year_month|date|month|quarter|partition_date|event_date|booking_month)$/i.test(c)) ||
+                    cols.find(c => /(date|month|quarter)/i.test(c));
+      if (!timeCol) return null;
+
+      // Identify numeric series columns
+      var numCols = cols.filter(c => {
+        if (c === timeCol) return false;
+        if (/^(project_id|project_name|project_number|billing_account_id|reporting_id|account_name|nal_name|nal_id|active_days|active_months|days_in_month|orders_count|deal_lines|customers_count)$/i.test(c)) {
+          return false;
+        }
+        return sq.rows.some(r => {
+          var v = r[c];
+          return v !== null && v !== undefined && v !== '' && !isNaN(Number(v));
+        });
+      });
+      if (!numCols.length) return null;
+      return {
+        timeCol: timeCol,
+        numCols: numCols.slice(0, 5),
+        defaultChartType: /month|quarter/i.test(timeCol) && sq.rows.length <= 14 ? 'line' : 'line'
+      };
+    }
+
+    function renderAgentInlineChart(canvasId, storeIdx, chartType) {
+      var sq = agentSqlResultsStore[storeIdx];
+      var spec = detectTimeSeriesSpec(sq);
+      if (!spec) return;
+      var canvasEl = document.getElementById(canvasId);
+      if (!canvasEl) return;
+      if (agentInlineCharts[canvasId]) {
+        agentInlineCharts[canvasId].destroy();
+      }
+      var rows = sq.rows.slice().sort((a, b) => String(a[spec.timeCol]).localeCompare(String(b[spec.timeCol])));
+      var labels = rows.map(r => String(r[spec.timeCol]));
+      var palette = ['#1a73e8', '#9334e6', '#0d9488', '#ea580c', '#e11d48'];
+      var bgPalette = ['rgba(26,115,232,0.12)', 'rgba(147,52,230,0.12)', 'rgba(13,148,136,0.12)', 'rgba(234,88,12,0.12)', 'rgba(225,29,72,0.12)'];
+
+      var datasets = spec.numCols.map((col, i) => ({
+        label: col,
+        data: rows.map(r => Number(r[col] || 0)),
+        borderColor: palette[i % palette.length],
+        backgroundColor: chartType === 'bar' ? palette[i % palette.length] : bgPalette[i % bgPalette.length],
+        borderWidth: 2,
+        pointRadius: rows.length > 40 ? 0 : 3,
+        fill: chartType === 'line' && i === 0,
+        tension: 0.22,
+        borderRadius: chartType === 'bar' ? 4 : 0
+      }));
+
+      agentInlineCharts[canvasId] = new Chart(canvasEl.getContext('2d'), {
+        type: chartType || 'line',
+        data: { labels: labels, datasets: datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            x: { ticks: { maxTicksLimit: 12 } },
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: function(v) {
+                  return Math.abs(v) >= 100 ? fmtCompactUSD(v) : v;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function formatInlineMd(text) {
+      var s = escapeHtml(text);
+      s = s.replace(/`([^`]+)`/g, '<code style="background:#f1f3f4;padding:1px 5px;border-radius:4px;font-family:Roboto Mono,monospace;font-size:12px;">$1</code>');
+      s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      return s;
+    }
+
+    function renderMarkdownToHtml(md) {
+      if (!md) return '';
+      var lines = md.split('\n');
+      var html = '';
+      var inTable = false;
+      var tableHeaderDone = false;
+      var inList = false;
+
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].trim();
+        if (line.startsWith('|') && line.endsWith('|')) {
+          if (inList) { html += '</ul>'; inList = false; }
+          var cells = line.slice(1, -1).split('|').map(c => c.trim());
+          if (cells.every(c => /^[:\-]+$/.test(c))) {
+            continue;
+          }
+          if (!inTable) {
+            html += '<div class="table-container"><table><thead><tr>';
+            cells.forEach(c => { html += `<th>${formatInlineMd(c)}</th>`; });
+            html += '</tr></thead><tbody>';
+            inTable = true;
+            tableHeaderDone = true;
+          } else {
+            html += '<tr>';
+            cells.forEach(c => {
+              var isNum = /^[\-\$0-9,\.%]+$/.test(c);
+              html += `<td class="${isNum ? 'text-num' : ''}">${formatInlineMd(c)}</td>`;
+            });
+            html += '</tr>';
+          }
+          continue;
+        } else if (inTable) {
+          html += '</tbody></table></div>';
+          inTable = false;
+          tableHeaderDone = false;
+        }
+
+        if (line.startsWith('### ')) {
+          if (inList) { html += '</ul>'; inList = false; }
+          html += `<h4 style="margin:10px 0 4px;color:#174ea6;">${formatInlineMd(line.slice(4))}</h4>`;
+        } else if (line.startsWith('## ')) {
+          if (inList) { html += '</ul>'; inList = false; }
+          html += `<h3 style="margin:12px 0 6px;color:#174ea6;font-size:15px;">${formatInlineMd(line.slice(3))}</h3>`;
+        } else if (line.startsWith('- ') || line.startsWith('* ')) {
+          if (!inList) { html += '<ul>'; inList = true; }
+          html += `<li>${formatInlineMd(line.slice(2))}</li>`;
+        } else if (line === '') {
+          if (inList) { html += '</ul>'; inList = false; }
+        } else {
+          if (inList) { html += '</ul>'; inList = false; }
+          html += `<p>${formatInlineMd(line)}</p>`;
+        }
+      }
+      if (inTable) html += '</tbody></table></div>';
+      if (inList) html += '</ul>';
+      return html;
+    }
+
+    function exportSqlResultCsv(storeIdx) {
+      var qObj = agentSqlResultsStore[storeIdx];
+      if (!qObj || !qObj.rows || !qObj.rows.length) return;
+      var cols = qObj.columns || Object.keys(qObj.rows[0]);
+      var csvLines = [cols.join(',')];
+      qObj.rows.forEach(r => {
+        var rowVals = cols.map(c => {
+          var v = r[c] === null || r[c] === undefined ? '' : String(r[c]);
+          if (v.includes(',') || v.includes('"') || v.includes('\n')) {
+            v = '"' + v.replace(/"/g, '""') + '"';
+          }
+          return v;
+        });
+        csvLines.push(rowVals.join(','));
+      });
+      var blob = new Blob(['\uFEFF' + csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'bhi_manu_agent_query_' + (storeIdx + 1) + '.csv';
+      a.click();
+    }
+
+    function askAgentPreset(q) {
+      switchMode('agent');
+      document.getElementById('agentInput').value = q;
+      sendAgentMessage();
+    }
+
+    function clearAgentChat() {
+      agentHistory = [];
+      var box = document.getElementById('agentMessages');
+      box.innerHTML = `
+        <div class="chat-msg assistant">
+          <div class="chat-avatar">🤖</div>
+          <div class="chat-bubble">
+            <p><strong>对话已重置。</strong>您可以点击上方预设长尾查询卡片或直接输入新问题。</p>
+          </div>
+        </div>
+      `;
+    }
+
+    async function sendAgentMessage() {
+      var input = document.getElementById('agentInput');
+      var btn = document.getElementById('agentSendBtn');
+      var q = (input.value || '').trim();
+      if (!q || btn.disabled) return;
+
+      input.value = '';
+      btn.disabled = true;
+      btn.textContent = 'BQCA 正在分析...';
+
+      var msgContainer = document.getElementById('agentMessages');
+
+      // Append user message
+      var userDiv = document.createElement('div');
+      userDiv.className = 'chat-msg user';
+      userDiv.innerHTML = `
+        <div class="chat-avatar">👤</div>
+        <div class="chat-bubble"><p style="white-space:pre-wrap;">${escapeHtml(q)}</p></div>
+      `;
+      msgContainer.appendChild(userDiv);
+
+      // Append loading bubble
+      var loadingDiv = document.createElement('div');
+      loadingDiv.className = 'chat-msg assistant';
+      loadingDiv.innerHTML = `
+        <div class="chat-avatar">🤖</div>
+        <div class="chat-bubble">
+          <p style="color:var(--google-blue);font-weight:500;">⏳ <strong>BQCA + Knowledge Catalog</strong> (<code>bhi-manu-2026-agent</code>) 正在匹配业务术语表、生成并执行受治理的 BigQuery SQL...</p>
+        </div>
+      `;
+      msgContainer.appendChild(loadingDiv);
+      msgContainer.scrollTop = msgContainer.scrollHeight;
+
+      try {
+        var resp = await authFetch('/api/agent/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: q, history: agentHistory })
+        });
+        var data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.detail || 'BQCA Agent request failed');
+        }
+
+        agentHistory.push({ role: 'user', content: q });
+        agentHistory.push({ role: 'assistant', content: data.answer || '' });
+
+        var thoughtsHtml = '';
+        if (data.thoughts && data.thoughts.length > 0) {
+          var stepsHtml = data.thoughts.map((t, idx) => `
+            <div style="padding:8px 12px; border-bottom:1px solid #e8f0fe; font-size:12px;">
+              <div style="font-weight:600; color:#174ea6; margin-bottom:2px;">Step ${idx + 1}: ${escapeHtml(t.title || '语义推理')}</div>
+              <div style="color:#475569; white-space:pre-wrap;">${escapeHtml(t.content || '')}</div>
+            </div>
+          `).join('');
+          thoughtsHtml = `
+            <details class="sql-details" style="margin-bottom:10px; border-color:#e9d5ff; background:#faf5ff;">
+              <summary style="color:#6b21a8;">
+                <span>🧠 BQCA + Knowledge Catalog 语义推理链路 (${data.thoughts.length} 步术语与表结构解析)</span>
+                <span class="pill pill-purple">Knowledge Catalog Governed</span>
+              </summary>
+              <div style="background:#ffffff;">${stepsHtml}</div>
+            </details>
+          `;
+        }
+
+        var sqlHtml = '';
+        var inlineChartsHtml = '';
+        var chartsToInit = [];
+        if (data.sql_queries && data.sql_queries.length > 0) {
+          data.sql_queries.forEach((sq, idx) => {
+            var storeIdx = agentSqlResultsStore.length;
+            agentSqlResultsStore.push(sq);
+            var jobBadge = sq.job_id ? `<span style="font-weight:400; color:#64748b; margin-left:6px;">[Job: ${escapeHtml(sq.job_id)}]</span>` : '';
+
+            // Check if SQL result is a time series (usage_date / year_month / date / month)
+            var tsSpec = detectTimeSeriesSpec(sq);
+            if (tsSpec) {
+              var canvasId = 'agentChart_' + storeIdx;
+              chartsToInit.push({ canvasId: canvasId, storeIdx: storeIdx, defaultType: tsSpec.defaultChartType });
+              inlineChartsHtml += `
+                <div style="margin:12px 0; padding:12px 14px; background:#f8fbff; border:1px solid #d2e3fc; border-radius:10px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                      <span style="font-size:12.5px; font-weight:700; color:#174ea6;">📈 自动生成的时序趋势曲线 (${escapeHtml(tsSpec.timeCol)} · ${sq.row_count || (sq.rows && sq.rows.length) || 0} 个数据点)</span>
+                      <span class="pill pill-blue" style="font-size:10.5px;">Chart.js 交互式可视化</span>
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                      <button class="btn-action" style="padding:3px 9px; font-size:11px;" onclick="renderAgentInlineChart('${canvasId}', ${storeIdx}, 'line')">📈 折线曲线</button>
+                      <button class="btn-action" style="padding:3px 9px; font-size:11px;" onclick="renderAgentInlineChart('${canvasId}', ${storeIdx}, 'bar')">📊 柱状对比</button>
+                      <button class="btn-action" style="padding:3px 9px; font-size:11px;" onclick="exportSqlResultCsv(${storeIdx})">📥 导出 CSV</button>
+                    </div>
+                  </div>
+                  <div style="height:240px; background:#ffffff; border-radius:8px; padding:8px; border:1px solid #e2e8f0;">
+                    <canvas id="${canvasId}"></canvas>
+                  </div>
+                </div>
+              `;
+            }
+
+            sqlHtml += `
+              <details class="sql-details">
+                <summary>
+                  <span>🗄️ BQCA 生成并执行的 BigQuery SQL #${idx + 1}: ${escapeHtml(sq.explanation)} (返回 ${sq.row_count || 0} 行)${jobBadge}</span>
+                  <button class="btn-action" onclick="event.stopPropagation(); exportSqlResultCsv(${storeIdx})">📥 导出 CSV</button>
+                </summary>
+                <div class="sql-code">${escapeHtml(sq.sql)}</div>
+              </details>
+            `;
+          });
+        }
+
+        var followupHtml = '';
+        if (data.followup_questions && data.followup_questions.length > 0) {
+          var chips = data.followup_questions.map(fq => {
+            var safeFq = escapeHtml(fq).replace(/'/g, '&#39;');
+            return `<button class="btn-action" style="text-align:left; font-weight:500; padding:5px 10px; border-radius:16px;" onclick="askAgentPreset('${safeFq}')">💬 ${escapeHtml(fq)}</button>`;
+          }).join('');
+          followupHtml = `
+            <div style="margin-top:12px; padding-top:10px; border-top:1px dashed var(--border-color);">
+              <div style="font-size:11.5px; font-weight:600; color:var(--text-secondary); margin-bottom:6px;">💡 BQCA 智能推荐追问：</div>
+              <div style="display:flex; flex-wrap:wrap; gap:6px;">${chips}</div>
+            </div>
+          `;
+        }
+
+        loadingDiv.innerHTML = `
+          <div class="chat-avatar">🤖</div>
+          <div class="chat-bubble">
+            ${thoughtsHtml}
+            ${inlineChartsHtml}
+            ${renderMarkdownToHtml(data.answer)}
+            ${sqlHtml}
+            ${followupHtml}
+          </div>
+        `;
+        chartsToInit.forEach(c => {
+          renderAgentInlineChart(c.canvasId, c.storeIdx, c.defaultType);
+        });
+      } catch (err) {
+        loadingDiv.innerHTML = `
+          <div class="chat-avatar">🤖</div>
+          <div class="chat-bubble">
+            <p style="color:var(--google-red);font-weight:600;">❌ 查询执行出错: ${escapeHtml(err.message)}</p>
+          </div>
+        `;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '发送查询 🚀';
+        msgContainer.scrollTop = msgContainer.scrollHeight;
+      }
+    }
+
+    initAuth();
+  </script>
+</body>
+</html>
