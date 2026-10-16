@@ -652,7 +652,12 @@ def run_pipeline():
     # Note: Per go/plan2100 & Rainmaker rules:
     # - Gemini Enterprise (fph_logical_product_l3 = 'Gemini Enterprise') counts at 100% of Net iACV (usd_comp_new + usd_comp_expansion)
     # - Gen AI FSP (fph_logical_product_l3 = 'Gen AI FSP', Gemini Enterprise Flexible Savings Plan) counts at 10% of Net iACV
-    print("\n=== Step 4: Building Gemini Enterprise (GE) Signed Bookings & Net ACV Table ===")
+    # - Seat Count Calibration: In concord-prod.service_cloudbi.bookings, Console / Self-Serve subscriptions
+    #   (such as Jaden's vivo 324-seat monthly Plus subscription) record b.quantity = 1 (1 contract line),
+    #   while the true licensed seat count is stored in concord-prod.service_cloudbi.subscriptions.metric_quantity.
+    #   We join subscriptions on subscription_id and deduplicate seats by contract_key (subscription_id or order_number)
+    #   so both monthly recurring subscriptions and offline Salesforce CPQ orders reflect exact licensed seat counts!
+    print("\n=== Step 4: Building Gemini Enterprise (GE) Signed Bookings & Net ACV Table (with Subscription Seat Calibration) ===")
     ge_query = f"""
     DECLARE assigned_nal_ids ARRAY<INT64>;
     SET assigned_nal_ids = ARRAY(
@@ -660,44 +665,133 @@ def run_pipeline():
       FROM `{SOURCE_PROJECT}.service_cloudbi.book_of_business_nal_view`
     );
 
-    SELECT
-      b.reporting_id,
-      ANY_VALUE(b.reporting_account_name) AS account_name,
-      ANY_VALUE(b.nal_name) AS nal_name,
-      b.fph_logical_product_l3 AS product_l3,
-      b.fph_sku_description AS sku_description,
-      b.order_type,
-      b.booking_type,
-      COUNT(*) AS deal_lines,
-      COUNT(DISTINCT b.order_number) AS orders_count,
-      SUM(COALESCE(b.quantity, 0)) AS total_seats,
-      MIN(b.date) AS first_booking_date,
-      MAX(b.date) AS latest_booking_date,
-      ROUND(SUM(COALESCE(b.usd_tcv, 0)), 2) AS signed_tcv,
-      ROUND(SUM(COALESCE(b.usd_acv, 0)), 2) AS signed_acv,
-      ROUND(SUM(COALESCE(b.usd_comp_new, 0)), 2) AS comp_new_acv,
-      ROUND(SUM(COALESCE(b.usd_comp_expansion, 0)), 2) AS comp_expansion_acv,
-      ROUND(SUM(COALESCE(b.usd_comp_renewal, 0)), 2) AS comp_renewal_acv,
-      ROUND(SUM(COALESCE(b.usd_comp_new, 0) + COALESCE(b.usd_comp_expansion, 0)), 2) AS raw_net_iacv,
-      ROUND(SUM(
+    WITH latest_subs AS (
+      SELECT
+        subscription_id,
+        MAX(CAST(metric_quantity AS INT64)) AS sub_seats
+      FROM `{SOURCE_PROJECT}.service_cloudbi.subscriptions`
+      WHERE partition_date = (SELECT MAX(partition_date) FROM `{SOURCE_PROJECT}.service_cloudbi.subscriptions`)
+      GROUP BY subscription_id
+    ),
+    enriched_lines AS (
+      SELECT
+        b.date AS booking_date,
+        b.year_month,
+        b.reporting_id,
+        b.reporting_account_name AS account_name,
+        b.nal_name,
+        b.fph_logical_product_l3 AS product_l3,
+        b.fph_sku_description AS sku_description,
+        b.order_type,
+        b.booking_type,
+        b.order_number,
+        b.subscription_id,
+        COALESCE(NULLIF(TRIM(b.subscription_id), ''), b.order_number) AS contract_key,
+        b.line_status,
+        CAST(COALESCE(b.quantity, 0) AS INT64) AS raw_booking_qty,
+        s.sub_seats,
+        CASE
+          WHEN COALESCE(b.usd_acv, 0) <= 0 THEN 0
+          WHEN COALESCE(s.sub_seats, 0) > 0 THEN s.sub_seats
+          WHEN COALESCE(b.quantity, 0) > 1 THEN CAST(b.quantity AS INT64)
+          WHEN b.fph_sku_description LIKE '%Plus%one month%' THEN CAST(ROUND(b.usd_acv / 60.0) AS INT64)
+          WHEN b.fph_sku_description LIKE '%Standard%one month%' THEN CAST(ROUND(b.usd_acv / 30.0) AS INT64)
+          WHEN b.fph_sku_description LIKE '%Plus%' THEN CAST(ROUND(b.usd_acv / 540.0) AS INT64)
+          WHEN b.fph_sku_description LIKE '%Standard%' THEN CAST(ROUND(b.usd_acv / 360.0) AS INT64)
+          ELSE COALESCE(CAST(b.quantity AS INT64), 0)
+        END AS line_effective_seats,
+        COALESCE(b.usd_tcv, 0) AS usd_tcv,
+        COALESCE(b.usd_acv, 0) AS usd_acv,
+        COALESCE(b.usd_comp_new, 0) AS usd_comp_new,
+        COALESCE(b.usd_comp_expansion, 0) AS usd_comp_expansion,
+        COALESCE(b.usd_comp_renewal, 0) AS usd_comp_renewal,
         CASE
           WHEN b.fph_logical_product_l3 = 'Gemini Enterprise' THEN COALESCE(b.usd_comp_new, 0) + COALESCE(b.usd_comp_expansion, 0)
           WHEN b.fph_logical_product_l3 = 'Gen AI FSP' THEN 0.10 * (COALESCE(b.usd_comp_new, 0) + COALESCE(b.usd_comp_expansion, 0))
           ELSE 0
-        END
-      ), 2) AS net_iacv,
-      ROUND(SUM(COALESCE(b.usd_comp_new, 0) + COALESCE(b.usd_comp_expansion, 0) + COALESCE(b.usd_comp_renewal, 0)), 2) AS total_comp_acv
-    FROM `{SOURCE_PROJECT}.service_cloudbi.bookings` b
+        END AS line_net_iacv
+      FROM `{SOURCE_PROJECT}.service_cloudbi.bookings` b
+      LEFT JOIN latest_subs s
+        ON b.subscription_id = s.subscription_id
       WHERE b.nal_id IN UNNEST(assigned_nal_ids)
-      AND b.date >= '2026-01-01'
-      AND b.date <= CURRENT_DATE('America/Los_Angeles')
-      AND b.fph_logical_product_l3 IN ('Gemini Enterprise', 'Gen AI FSP')
+        AND b.date >= '2026-01-01'
+        AND b.date <= CURRENT_DATE('America/Los_Angeles')
+        AND b.fph_logical_product_l3 IN ('Gemini Enterprise', 'Gen AI FSP')
+    ),
+    contract_summary AS (
+      SELECT
+        reporting_id,
+        product_l3,
+        sku_description,
+        order_type,
+        booking_type,
+        contract_key,
+        MAX(line_effective_seats) AS contract_seats,
+        SUM(usd_acv) AS contract_net_acv,
+        SUM(raw_booking_qty) AS contract_raw_qty
+      FROM enriched_lines
+      GROUP BY 1, 2, 3, 4, 5, 6
+    ),
+    contract_seats_agg AS (
+      SELECT
+        reporting_id,
+        product_l3,
+        sku_description,
+        order_type,
+        booking_type,
+        SUM(CASE WHEN contract_net_acv > 0.01 THEN contract_seats ELSE 0 END) AS true_active_seats,
+        SUM(contract_raw_qty) AS raw_booking_qty_sum
+      FROM contract_summary
+      GROUP BY 1, 2, 3, 4, 5
+    ),
+    latest_order_per_group AS (
+      SELECT
+        reporting_id,
+        product_l3,
+        sku_description,
+        order_type,
+        booking_type,
+        ARRAY_AGG(STRUCT(booking_date, line_effective_seats, usd_acv, line_net_iacv) ORDER BY booking_date DESC, usd_acv DESC LIMIT 1)[OFFSET(0)] AS latest_ord
+      FROM enriched_lines
+      WHERE usd_acv > 0
+      GROUP BY 1, 2, 3, 4, 5
+    )
+    SELECT
+      e.reporting_id,
+      ANY_VALUE(e.account_name) AS account_name,
+      ANY_VALUE(e.nal_name) AS nal_name,
+      e.product_l3,
+      e.sku_description,
+      e.order_type,
+      e.booking_type,
+      COUNT(*) AS deal_lines,
+      COUNT(DISTINCT e.order_number) AS orders_count,
+      COALESCE(ANY_VALUE(c.true_active_seats), 0) AS total_seats,
+      COALESCE(ANY_VALUE(lo.latest_ord.line_effective_seats), 0) AS latest_order_seats,
+      ROUND(COALESCE(ANY_VALUE(lo.latest_ord.usd_acv), 0), 2) AS latest_order_acv,
+      MIN(e.booking_date) AS first_booking_date,
+      MAX(e.booking_date) AS latest_booking_date,
+      ROUND(SUM(e.usd_tcv), 2) AS signed_tcv,
+      ROUND(SUM(e.usd_acv), 2) AS signed_acv,
+      ROUND(SUM(e.usd_comp_new), 2) AS comp_new_acv,
+      ROUND(SUM(e.usd_comp_expansion), 2) AS comp_expansion_acv,
+      ROUND(SUM(e.usd_comp_renewal), 2) AS comp_renewal_acv,
+      ROUND(SUM(e.usd_comp_new + e.usd_comp_expansion), 2) AS raw_net_iacv,
+      ROUND(SUM(e.line_net_iacv), 2) AS net_iacv,
+      ROUND(SUM(e.usd_comp_new + e.usd_comp_expansion + e.usd_comp_renewal), 2) AS total_comp_acv
+    FROM enriched_lines e
+    LEFT JOIN contract_seats_agg c
+      USING (reporting_id, product_l3, sku_description, order_type, booking_type)
+    LEFT JOIN latest_order_per_group lo
+      USING (reporting_id, product_l3, sku_description, order_type, booking_type)
     GROUP BY 1, 4, 5, 6, 7
     ORDER BY net_iacv DESC
     """
     df_ge = execute_concord_script(concord_client, ge_query)
-    for col in ['signed_tcv', 'signed_acv', 'comp_new_acv', 'comp_expansion_acv', 'comp_renewal_acv', 'raw_net_iacv', 'net_iacv', 'total_comp_acv']:
+    for col in ['latest_order_acv', 'signed_tcv', 'signed_acv', 'comp_new_acv', 'comp_expansion_acv', 'comp_renewal_acv', 'raw_net_iacv', 'net_iacv', 'total_comp_acv']:
         df_ge[col] = df_ge[col].astype(float)
+    for col in ['deal_lines', 'orders_count', 'total_seats', 'latest_order_seats']:
+        df_ge[col] = df_ge[col].fillna(0).astype(int)
 
     table_id_ge = f"{TARGET_PROJECT}.{TARGET_DATASET}.customer_ge_bookings_2026"
     job_config_ge = bigquery.LoadJobConfig(
@@ -709,6 +803,83 @@ def run_pipeline():
     load_job.result()
     print(f"Loaded {table_id_ge} successfully.")
 
+    # Step 4a-2: Extract Granular Order-Level GE Bookings Table (customer_ge_orders_2026)
+    print("\n=== Step 4a-2: Building Granular GE Order-Line Table (customer_ge_orders_2026) ===")
+    ge_orders_query = f"""
+    DECLARE assigned_nal_ids ARRAY<INT64>;
+    SET assigned_nal_ids = ARRAY(
+      SELECT SAFE_CAST(entity_id AS INT64)
+      FROM `{SOURCE_PROJECT}.service_cloudbi.book_of_business_nal_view`
+    );
+
+    WITH latest_subs AS (
+      SELECT
+        subscription_id,
+        MAX(CAST(metric_quantity AS INT64)) AS sub_seats
+      FROM `{SOURCE_PROJECT}.service_cloudbi.subscriptions`
+      WHERE partition_date = (SELECT MAX(partition_date) FROM `{SOURCE_PROJECT}.service_cloudbi.subscriptions`)
+      GROUP BY subscription_id
+    )
+    SELECT
+      b.date AS booking_date,
+      b.year_month,
+      b.reporting_id,
+      b.reporting_account_name AS account_name,
+      b.nal_name,
+      b.fph_logical_product_l3 AS product_l3,
+      b.fph_sku_description AS sku_description,
+      b.order_type,
+      b.booking_type,
+      b.order_number,
+      b.subscription_id,
+      b.line_status,
+      CAST(COALESCE(b.quantity, 0) AS INT64) AS raw_booking_qty,
+      CASE
+        WHEN COALESCE(b.usd_acv, 0) <= 0 THEN 0
+        WHEN COALESCE(s.sub_seats, 0) > 0 THEN s.sub_seats
+        WHEN COALESCE(b.quantity, 0) > 1 THEN CAST(b.quantity AS INT64)
+        WHEN b.fph_sku_description LIKE '%Plus%one month%' THEN CAST(ROUND(b.usd_acv / 60.0) AS INT64)
+        WHEN b.fph_sku_description LIKE '%Standard%one month%' THEN CAST(ROUND(b.usd_acv / 30.0) AS INT64)
+        WHEN b.fph_sku_description LIKE '%Plus%' THEN CAST(ROUND(b.usd_acv / 540.0) AS INT64)
+        WHEN b.fph_sku_description LIKE '%Standard%' THEN CAST(ROUND(b.usd_acv / 360.0) AS INT64)
+        ELSE COALESCE(CAST(b.quantity AS INT64), 0)
+      END AS seats,
+      ROUND(COALESCE(b.usd_tcv, 0), 2) AS signed_tcv,
+      ROUND(COALESCE(b.usd_acv, 0), 2) AS signed_acv,
+      ROUND(COALESCE(b.usd_comp_new, 0), 2) AS comp_new_acv,
+      ROUND(COALESCE(b.usd_comp_expansion, 0), 2) AS comp_expansion_acv,
+      ROUND(COALESCE(b.usd_comp_renewal, 0), 2) AS comp_renewal_acv,
+      ROUND(
+        CASE
+          WHEN b.fph_logical_product_l3 = 'Gemini Enterprise' THEN COALESCE(b.usd_comp_new, 0) + COALESCE(b.usd_comp_expansion, 0)
+          WHEN b.fph_logical_product_l3 = 'Gen AI FSP' THEN 0.10 * (COALESCE(b.usd_comp_new, 0) + COALESCE(b.usd_comp_expansion, 0))
+          ELSE 0
+        END, 2
+      ) AS net_iacv
+    FROM `{SOURCE_PROJECT}.service_cloudbi.bookings` b
+    LEFT JOIN latest_subs s
+      ON b.subscription_id = s.subscription_id
+    WHERE b.nal_id IN UNNEST(assigned_nal_ids)
+      AND b.date >= '2026-01-01'
+      AND b.date <= CURRENT_DATE('America/Los_Angeles')
+      AND b.fph_logical_product_l3 IN ('Gemini Enterprise', 'Gen AI FSP')
+    ORDER BY booking_date DESC, signed_acv DESC
+    """
+    df_ge_orders = execute_concord_script(concord_client, ge_orders_query)
+    for col in ['signed_tcv', 'signed_acv', 'comp_new_acv', 'comp_expansion_acv', 'comp_renewal_acv', 'net_iacv']:
+        df_ge_orders[col] = df_ge_orders[col].astype(float)
+    for col in ['raw_booking_qty', 'seats']:
+        df_ge_orders[col] = df_ge_orders[col].fillna(0).astype(int)
+
+    table_id_ge_orders = f"{TARGET_PROJECT}.{TARGET_DATASET}.customer_ge_orders_2026"
+    job_config_ge_orders = bigquery.LoadJobConfig(
+        write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
+        clustering_fields=['booking_date', 'nal_name', 'reporting_id']
+    )
+    print(f"Loading {len(df_ge_orders)} rows into {table_id_ge_orders}...")
+    target_client.load_table_from_dataframe(df_ge_orders, table_id_ge_orders, job_config=job_config_ge_orders).result()
+    print(f"Loaded {table_id_ge_orders} successfully.")
+
     # Step 4b: Extract GE Monthly Bookings Walk
     print("\n=== Step 4b: Building GE Monthly Signed Bookings Walk ===")
     ge_monthly_query = f"""
@@ -718,11 +889,52 @@ def run_pipeline():
       FROM `{SOURCE_PROJECT}.service_cloudbi.book_of_business_nal_view`
     );
 
+    WITH latest_subs AS (
+      SELECT
+        subscription_id,
+        MAX(CAST(metric_quantity AS INT64)) AS sub_seats
+      FROM `{SOURCE_PROJECT}.service_cloudbi.subscriptions`
+      WHERE partition_date = (SELECT MAX(partition_date) FROM `{SOURCE_PROJECT}.service_cloudbi.subscriptions`)
+      GROUP BY subscription_id
+    ),
+    monthly_sub_dedup AS (
+      SELECT
+        b.year_month,
+        COALESCE(NULLIF(TRIM(b.subscription_id), ''), b.order_number) AS contract_key,
+        MAX(
+          CASE
+            WHEN COALESCE(b.usd_acv, 0) <= 0 THEN 0
+            WHEN COALESCE(s.sub_seats, 0) > 0 THEN s.sub_seats
+            WHEN COALESCE(b.quantity, 0) > 1 THEN CAST(b.quantity AS INT64)
+            WHEN b.fph_sku_description LIKE '%Plus%one month%' THEN CAST(ROUND(b.usd_acv / 60.0) AS INT64)
+            WHEN b.fph_sku_description LIKE '%Standard%one month%' THEN CAST(ROUND(b.usd_acv / 30.0) AS INT64)
+            WHEN b.fph_sku_description LIKE '%Plus%' THEN CAST(ROUND(b.usd_acv / 540.0) AS INT64)
+            WHEN b.fph_sku_description LIKE '%Standard%' THEN CAST(ROUND(b.usd_acv / 360.0) AS INT64)
+            ELSE COALESCE(CAST(b.quantity AS INT64), 0)
+          END
+        ) AS contract_seats,
+        SUM(COALESCE(b.usd_acv, 0)) AS contract_acv
+      FROM `{SOURCE_PROJECT}.service_cloudbi.bookings` b
+      LEFT JOIN latest_subs s
+        ON b.subscription_id = s.subscription_id
+      WHERE b.nal_id IN UNNEST(assigned_nal_ids)
+        AND b.date >= '2026-01-01'
+        AND b.date <= CURRENT_DATE('America/Los_Angeles')
+        AND b.fph_logical_product_l3 IN ('Gemini Enterprise', 'Gen AI FSP')
+      GROUP BY 1, 2
+    ),
+    monthly_seats_agg AS (
+      SELECT
+        year_month,
+        SUM(CASE WHEN contract_acv > 0.01 THEN contract_seats ELSE 0 END) AS monthly_seats
+      FROM monthly_sub_dedup
+      GROUP BY 1
+    )
     SELECT
       b.year_month,
       COUNT(*) AS deal_lines,
       COUNT(DISTINCT b.reporting_id) AS customers_count,
-      SUM(COALESCE(b.quantity, 0)) AS monthly_seats,
+      COALESCE(ANY_VALUE(ms.monthly_seats), 0) AS monthly_seats,
       ROUND(SUM(COALESCE(b.usd_tcv, 0)), 2) AS signed_tcv,
       ROUND(SUM(COALESCE(b.usd_acv, 0)), 2) AS signed_acv,
       ROUND(SUM(COALESCE(b.usd_comp_new, 0)), 2) AS comp_new_acv,
@@ -736,6 +948,8 @@ def run_pipeline():
         END
       ), 2) AS net_iacv
     FROM `{SOURCE_PROJECT}.service_cloudbi.bookings` b
+    LEFT JOIN monthly_seats_agg ms
+      ON b.year_month = ms.year_month
     WHERE b.nal_id IN UNNEST(assigned_nal_ids)
       AND b.date >= '2026-01-01'
       AND b.date <= CURRENT_DATE('America/Los_Angeles')

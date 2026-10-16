@@ -609,6 +609,8 @@ async def api_ge_stats(refresh: int = 0, user: str = Depends(require_user)):
           deal_lines,
           orders_count,
           total_seats,
+          COALESCE(latest_order_seats, total_seats) AS latest_order_seats,
+          COALESCE(latest_order_acv, signed_acv) AS latest_order_acv,
           CAST(first_booking_date AS STRING) AS first_booking_date,
           CAST(latest_booking_date AS STRING) AS latest_booking_date,
           signed_tcv,
@@ -1445,10 +1447,10 @@ async def api_agent_catalog(user: str = Depends(require_user)):
         "api_endpoint": "https://geminidataanalytics.googleapis.com/v1beta",
         "data_agent": BQCA_AGENT_RESOURCE,
         "knowledge_catalog_glossary": KNOWLEDGE_CATALOG_GLOSSARY,
-        "governed_tables_count": 14,
-        "governed_columns_count": 374,
+        "governed_tables_count": 15,
+        "governed_columns_count": 396,
         "glossary_terms_count": 9,
-        "verified_queries_count": 9,
+        "verified_queries_count": 10,
     }
 
 

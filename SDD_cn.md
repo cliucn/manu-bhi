@@ -1,7 +1,7 @@
-# 软件设计说明书 (SDD v1.12)：2026 行业线收入、RunRate 与三大桶 Quota 达成门户（含 BQCA + Knowledge Catalog 智能分析引擎、GCP Project 级细粒度 MRR/DRR 曲线、无状态长效认证 & 四级缓存加速架构）
+# 软件设计说明书 (SDD v1.13)：2026 行业线收入、RunRate 与三大桶 Quota 达成门户（含 BQCA + Knowledge Catalog 智能分析引擎、独立 Project 级 MRR/DRR 曲线专区、GE Subscriptions 真实席位数校准、无状态长效认证 & 四级缓存加速架构）
 
-- **文档版本**：`v1.12 (Production Release)`
-- **更新日期**：`2026-10-15`
+- **文档版本**：`v1.13 (Production Release)`
+- **更新日期**：`2026-10-16`
 - **适用范围**：`Google Cloud 区域与行业线 (BHI / Manufacturing 等领地可通用复用)`
 - **目标 GCP 项目与数据集**：`<YOUR_PROJECT_ID>.<YOUR_DATASET>`（示例：`bhi_manu`）
 - **BQCA Data Agent 资源**：`projects/<YOUR_PROJECT_ID>/locations/global/dataAgents/bhi-manu-2026-agent`
@@ -27,9 +27,9 @@
 - **口径 100% 对齐 `go/plan2100` 与 `go/rainmaker`**：自动完成 Bucket 1 (`GCP iRevenue`)、Bucket 2 (`DA, DB & Cloud AI iRevenue`)、Bucket 3 (`Gemini Enterprise Net ACV`) 的领地级与各 Street-Level NAL 级精确对账（含账户级负向归零、Marketplace 25% Quota Cap、Bucket 2 1P-Only 过滤及对账截止日期显式标注）。
 - **无状态长效 Session（7天有效）+ 滑动自动续期访问控制 + 未登录前零信息暴露**：将 Google 1 小时 `id_token` 换发为应用自签名的 7 天无状态 `HS256` `HttpOnly` Session Cookie，剩余有效期低于 50% 时自动滑动续期；未通过登录验证前服务端仅下发 3.4 KB 零业务信息登录壳页面（Zero Pre-Login Information Exposure），不暴露任何业务 DOM、指标名称或白名单账号。
 - **前后端四级缓存加速架构（0ms 刷新秒开 + 5 步动态进度条）**：结合浏览器 `localStorage` 全量快照缓存（L1，6 小时 TTL + SWR 静默版本比对）、`sessionStorage` 每日 DRR 趋势曲线缓存（L2，切换 RVP/Gross 视图 `0ms` 重绘）、后端多线程并发查询与 1 小时内存缓存（L3）以及顶栏一键强制穿透刷新按钮（L4），彻底消除每次刷新重复查询 BigQuery 的等待；首次冷加载时展示 5 步实时数据计算进度条，避免加载期间出现 `$0` 占位符。
-- **三层汇总与三层级每日 RunRate 曲线下钻（NAL 级 + Account 级 + GCP Project ID 级）**：同时提供 **NAL 级（第一层，业务组汇总）**、**Account 级（第二层，客户明细）** 以及 **GCP Project ID 级（第三层，细粒度项目工作台）** 的月度 MRR 与每日 **单日 RunRate (DRR)** 走势曲线。
-- **BQCA + Knowledge Catalog 语义治理长尾分析 + 对话气泡内自动曲线渲染**：基于 Google Cloud 原生 **BigQuery Conversational Analytics (`geminidataanalytics.googleapis.com/v1beta`)** 与 **Knowledge Catalog (`dataplex.googleapis.com/v1`)**，将 14 张表 / 374 列语义描述、9 项官方业务术语及 9 组黄金验证 SQL 注入受治理的 Data Agent，并在前端实现 **时序结果集自动检测与 Chart.js 交互式折线/柱状图内嵌渲染**。
-- **全量变更可审计（Release Notes）与一键复制重现**：内置独立版本更新日志页面（`/releasenotes`，记录 `v1.0.0` 至 `v1.12.0` 完整变更），其他行业线或区域团队仅需修改项目配置与领地 NAL 范围，即可在 15 分钟内完整克隆部署。
+- **三层汇总与三层级每日 RunRate 曲线下钻（NAL 级 + Account 级 + 独立 GCP Project ID 级顶层专区）**：同时提供 **NAL 级（第一层，业务组汇总）**、**Account 级（第二层，客户明细）** 以及独立的 **Tab 5「🔍 Project 级 MRR & DRR 曲线」顶层专区（第三层，覆盖全领地 5,078 个命名 GCP Project，含 Top 300 项目交互式计分卡表格与双曲线联动）** 的月度 MRR 与每日 **单日 RunRate (DRR)** 走势曲线。
+- **BQCA + Knowledge Catalog 语义治理长尾分析 + 过去两周新签 GE 订单明细 + 对话气泡内自动曲线渲染**：基于 Google Cloud 原生 **BigQuery Conversational Analytics (`geminidataanalytics.googleapis.com/v1beta`)** 与 **Knowledge Catalog (`dataplex.googleapis.com/v1`)**，将 15 张表 / 396 列语义描述（含逐笔订单流水表 `customer_ge_orders_2026` 及关联 `subscriptions.metric_quantity` 校准的真实授权席位数 `seats`）、9 项官方业务术语及 10 组黄金验证 SQL 注入受治理的 Data Agent，并在前端实现 **时序结果集自动检测与 Chart.js 交互式折线/柱状图内嵌渲染**。
+- **全量变更可审计（Release Notes）与一键复制重现**：内置独立版本更新日志页面（`/releasenotes`，记录 `v1.0.0` 至 `v1.13.0` 完整变更），其他行业线或区域团队仅需修改项目配置与领地 NAL 范围，即可在 15 分钟内完整克隆部署。
 
 ---
 
@@ -154,10 +154,13 @@ manu-bhi/
          $$\text{Pre-Watermark Net iACV} = \text{New/Expansion GE ACV} \times 100\% + \text{New/Expansion FSP ACV} \times 10\%$$
      - **Step 3（扣除 `NETACV_MONTHLY` 月度历史水位线与退订冲减 `watermark_adjustment`）**：
        - 对齐 `service_cloudbi.nal_reporting` (`product = 'AGENTSPACE'`, `quota_metric_Basis = 'NETACV_MONTHLY'`)，扣除月度历史最高水位线（Monthly Watermark）与退订冲减额，得到与 `go/rainmaker` 100% 一致的最终认账达成（`rainmaker_final_attainment`）。
+     - **Step 4（GE 授权席位数 `total_seats` / `seats` 的 Subscriptions 联合校准算法）**：
+       - 在 `concord-prod.service_cloudbi.bookings` 中，仅 Salesforce CPQ 线下合同（`order_number` 以 `006...` 开头）在 `bookings.quantity` 字段直接记录授权席位数；而所有通过 Console / 自助通道下单的月度或年度订阅合同（`subscription_id` 为 UUID，如 `vivo Mobile Communication Co., Ltd` 的月度 Plus 订阅），`bookings.quantity` 固定记为 **`1`**（代表 1 份订阅合同行，而非 1 个 Seat）。
+       - 系统通过 `b.subscription_id = s.subscription_id` 关联 `concord-prod.service_cloudbi.subscriptions` 最新分区的 `metric_quantity` 字段获取真实授权席位数（`COALESCE(s.metric_quantity, b.quantity)`），并在客户汇总表 `customer_ge_bookings_2026` 中按唯一合同键 `COALESCE(subscription_id, order_number)` 去重汇总有效席位数（避免按月账单行重复累加席位），同时在逐笔订单表 `customer_ge_orders_2026` 中记录每一笔新签订单的真实席位数（如 `2026-10-10` `jadenwang` 下 `vivo` 订单为 `324 席 / $19,647.00`）。
 
 ---
 
-## 5. 目标数据仓模型设计 (`<YOUR_PROJECT_ID>.bhi_manu` 14 张表)
+## 5. 目标数据仓模型设计 (`<YOUR_PROJECT_ID>.bhi_manu` 15 张表)
 
 | 序号 | 表名 (Table ID) | 粒度 (Grain) | 核心用途与对应前端视图 |
 | :---: | :--- | :--- | :--- |
@@ -165,16 +168,17 @@ manu-bhi/
 | 2 | `nal_revenue_scorecard_2026` | `nal_name` (NAL 级) | NAL 级 YTD RVP/Gross 收入、最新单日 DRR、当月/上月 MRR 及 AI 渗透率（Tab 1 & Tab 2 第一层表） |
 | 3 | `customer_monthly_revenue` | `reporting_id × year_month` | 客户×月度累计 RunRate (MRR) 与当月日均 DRR（月度趋势图 & MoM 分析） |
 | 4 | `customer_daily_runrate` | `reporting_id × usage_date` | 年初至今（截至 T-2）每日单日 RunRate (DRR)、MTD 累计与 7 日移动平均（支持 NAL 级与客户级双层每日曲线） |
-| 5 | `customer_ge_bookings_2026` | `reporting_id × sku_description` | Gemini Enterprise & Gen AI FSP 客户签约订单、席位数、TCV、100% Signed ACV 与折算后 Net iACV（Tab 3 第二层表） |
-| 6 | `nal_ge_bookings_2026` | `nal_name` (NAL 级) | 按 NAL 汇总 GE 签约客户数、席位数、原始签约额、水位线前 Net iACV 与 Rainmaker 最终认账额（Tab 3 第一层表） |
-| 7 | `ge_monthly_bookings_2026` | `year_month` (月度级) | 按月汇总 GE 新签 (New)、扩容 (Expansion)、续约 (Renewal) 与净增走势（Tab 3 月度柱状图） |
-| 8 | `nal_three_buckets_quota_2026` | `nal_id` (一线 NAL) | **核心考核对账表**：各 NAL 在三大桶的去年同期基线、年度全量/增量 Quota、实际达成与达成率（顶栏 Banner & Tab 4） |
-| 9 | `territory_quarterly_quota_2026` | `quarter × product` | Q1–Q4 分季度、分考核产品线的基线、Quota 与实绩明细（Tab 4 第三部分） |
-| 10 | `customer_product_revenue_daily` | `reporting_id × usage_date × fph_l3` | 细粒度客户每日产品子项消费明细，供深度下钻查询 |
-| 11 | `customer_ge_details_2026` | `reporting_id × fph_l5` | 账单侧 GE 相关子产品出账明细 |
-| 12 | `project_revenue_scorecard_2026` | `project_id × billing_account_id` | **GCP Project 级计分卡**：覆盖全领地 5,414 个 Project 的 YTD 收入、9月/10月 MRR、最新单日 DRR 与 7 日均值（Tab 5 工作台 & BQCA） |
-| 13 | `project_monthly_revenue` | `project_id × year_month` | **GCP Project 级自然月 MRR 表**：全部 5,414 个 Project 在 2026-01 至 2026-10 的月度 MRR 与日均 DRR 走势曲线 |
-| 14 | `project_daily_runrate` | `project_id × usage_date` | **GCP Project 级每日 DRR 曲线表**：按 `usage_date` 分区、`project_id` 聚簇，记录活跃 Project 的每日 DRR 曲线与 7 日移动均线 |
+| 5 | `customer_ge_bookings_2026` | `reporting_id × sku_description` | Gemini Enterprise & Gen AI FSP 客户签约订单汇总、经 `subscriptions.metric_quantity` 校准的真实有效席位数 (`total_seats`)、最近一笔订单席位数 (`latest_order_seats`)、TCV、100% Signed ACV 与折算后 Net iACV（Tab 3 第二层表） |
+| 6 | `customer_ge_orders_2026` | `booking_date × order_number` | **GE 逐笔订单明细流水表**：记录每一笔 GE 订单的精确下单日期 (`booking_date`)、销售代表 NAL、客户、SKU、校准后真实授权席位数 (`seats`) 与单笔 ACV（支持「过去两周新下单的 GE」等高频长尾查询） |
+| 7 | `nal_ge_bookings_2026` | `nal_name` (NAL 级) | 按 NAL 汇总 GE 签约客户数、校准后真实总席位数、原始签约额、水位线前 Net iACV 与 Rainmaker 最终认账额（Tab 3 第一层表） |
+| 8 | `ge_monthly_bookings_2026` | `year_month` (月度级) | 按月汇总 GE 新签 (New)、扩容 (Expansion)、续约 (Renewal) 与净增走势（Tab 3 月度柱状图） |
+| 9 | `nal_three_buckets_quota_2026` | `nal_id` (一线 NAL) | **核心考核对账表**：各 NAL 在三大桶的去年同期基线、年度全量/增量 Quota、实际达成与达成率（顶栏 Banner & Tab 4） |
+| 10 | `territory_quarterly_quota_2026` | `quarter × product` | Q1–Q4 分季度、分考核产品线的基线、Quota 与实绩明细（Tab 4 第三部分） |
+| 11 | `customer_product_revenue_daily` | `reporting_id × usage_date × fph_l3` | 细粒度客户每日产品子项消费明细，供深度下钻查询 |
+| 12 | `customer_ge_details_2026` | `reporting_id × fph_l5` | 账单侧 GE 相关子产品出账明细 |
+| 13 | `project_revenue_scorecard_2026` | `project_id × billing_account_id` | **GCP Project 级计分卡**：覆盖全领地 5,414 个 Project 的 YTD 收入、9月/10月 MRR、最新单日 DRR 与 7 日均值（Tab 5 独立专区 & BQCA） |
+| 14 | `project_monthly_revenue` | `project_id × year_month` | **GCP Project 级自然月 MRR 表**：全部 5,414 个 Project 在 2026-01 至 2026-10 的月度 MRR 与日均 DRR 走势曲线 |
+| 15 | `project_daily_runrate` | `project_id × usage_date` | **GCP Project 级每日 DRR 曲线表**：按 `usage_date` 分区、`project_id` 聚簇，记录活跃 Project 的每日 DRR 曲线与 7 日移动均线 |
 
 ---
 

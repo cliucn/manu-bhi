@@ -443,14 +443,14 @@
           </p>
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <span class="pill pill-green">当前线上版本: v1.12.0</span>
+          <span class="pill pill-green">当前线上版本: v1.13.0</span>
           <span class="pill pill-blue">认证方案: cloudrun-session-domain-auth (7d Sliding)</span>
         </div>
       </div>
       <div class="rn-stats">
         <div class="rn-stat-card">
           <div class="rn-stat-label">累计发布版本数</div>
-          <div class="rn-stat-val">13 个版本 (v1.0 → v1.12)</div>
+          <div class="rn-stat-val">14 个版本 (v1.0 → v1.13)</div>
         </div>
         <div class="rn-stat-card">
           <div class="rn-stat-label">会话保活时长</div>
@@ -462,30 +462,76 @@
         </div>
         <div class="rn-stat-card">
           <div class="rn-stat-label">BQCA 语义治理资产</div>
-          <div class="rn-stat-val">14 表 · 374 列 · 9 术语</div>
+          <div class="rn-stat-val">15 表 · 396 列 · 9 术语</div>
         </div>
       </div>
     </div>
 
     <div class="filter-bar">
       <div class="filter-chips">
-        <button class="chip active" onclick="filterReleases('all', this)">全部变更 (13)</button>
+        <button class="chip active" onclick="filterReleases('all', this)">全部变更 (14)</button>
         <button class="chip" onclick="filterReleases('auth', this)">🔐 认证与安全加固</button>
         <button class="chip" onclick="filterReleases('calibration', this)">🎯 Rainmaker 对账与口径校准</button>
         <button class="chip" onclick="filterReleases('agent', this)">🤖 AI Agent 与语义治理</button>
         <button class="chip" onclick="filterReleases('ui', this)">🎨 前端交互与可视化</button>
       </div>
-      <input type="text" id="rnSearch" class="search-input" placeholder="🔍 搜索版本号、代表名 (如 winstoon/fankaia) 或关键词..." oninput="searchReleases()" />
+      <input type="text" id="rnSearch" class="search-input" placeholder="🔍 搜索版本号、代表名 (如 jadenwang/winstoon) 或关键词..." oninput="searchReleases()" />
     </div>
 
     <div class="timeline" id="timelineContainer">
 
-      <!-- v1.12.0 -->
-      <div class="release-card latest" data-cat="agent ui">
+      <!-- v1.13.0 -->
+      <div class="release-card latest" data-cat="calibration agent ui">
         <div class="release-dot"></div>
         <div class="release-header">
           <div class="release-title-group">
-            <span class="ver-badge">v1.12.0 (Latest)</span>
+            <span class="ver-badge">v1.13.0 (Latest)</span>
+            <span class="release-title">独立 Project 级 MRR &amp; DRR 曲线顶层专区 + 长尾常用查询「过去两周新下单的 GE」+ GE 真实授权席位数 (Seats) 关联 Subscriptions 校准（修复 Jaden vivo 324 席等订单）</span>
+            <span class="pill pill-green">🎯 Rainmaker 对账与口径校准</span>
+            <span class="pill pill-purple">🤖 AI Agent 与语义治理</span>
+            <span class="pill pill-blue">🎨 前端交互与可视化</span>
+          </div>
+          <span class="release-date">2026-10-16</span>
+        </div>
+        <div class="release-body">
+          <ul>
+            <li><strong>独立顶层导航专区「🔍 Project 级 MRR &amp; DRR 曲线」（Tab 5 拆分为独立界面）</strong>：
+              <ul>
+                <li>将原先内嵌在长尾查询中的 GCP Project 曲线工作台拆分为顶层独立标签页（<code>#tabProject</code> / <code>#projectView</code>），AI 数据分析 Agent 聚焦于自然语言长尾查询（Tab 6）。</li>
+                <li>在 Project 专区内新增 <strong>全领地 Top 300 GCP Projects 2026 收入与 RunRate 计分卡明细表</strong>，支持按客户或关键词实时过滤，点击第一列任意 <code>project_id</code> 即可在上方联动绘制该 Project 的 <strong>自然月度 MRR 走势图</strong> 与 <strong>每日 DRR 曲线及 7日均线图</strong>。</li>
+              </ul>
+            </li>
+            <li><strong>长尾查询新增高频预设卡片「✨ 过去两周新下单的 GE 订单与席位数明细」及逐笔订单流水表 <code>customer_ge_orders_2026</code></strong>：
+              <ul>
+                <li>新增第 15 张 BigQuery 治理表 <code>customer_ge_orders_2026</code>（<code>310</code> 行逐笔订单流水），完整记录每笔 GE 与 Gen AI FSP 订单的精确下单日期（<code>booking_date</code>）、销售代表 NAL、客户名称、SKU、订单号、订阅 ID、校准后真实授权席位数（<code>seats</code>）、单笔签约 ACV 及折算后 Net iACV。</li>
+                <li>在 BQCA Agent 预设查询区首位新增 <strong>「✨ 1. 过去两周新下单的 GE 订单与席位数明细」</strong> 与 <strong>「🎯 2. Jaden (<code>jadenwang</code>) vivo GE 订单与 324 席位核查」</strong>，并同步注册第 10 组黄金验证 SQL。</li>
+              </ul>
+            </li>
+            <li><strong>根因定位并修复 Gemini Enterprise (GE) 授权席位数（<code>total_seats</code> / <code>seats</code>）偏小问题</strong>：
+              <ul>
+                <li><strong>根因说明</strong>：在源表 <code>concord-prod.service_cloudbi.bookings</code> 中，仅 Salesforce CPQ 线下合同（订单号以 <code>006...</code> 开头，如 <code>Shenzhen SDMC</code> 2,000 席、<code>BYD</code> 500 席）在 <code>bookings.quantity</code> 直接记录席位数；而所有通过 Console / 自助通道下单的月度或年度订阅合同（<code>subscription_id</code> 为 UUID，如 Jaden <code>jadenwang</code> 名下 <code>vivo Mobile Communication Co., Ltd</code> 的月度 Plus 订阅 <code>191629fc-70d0-44ad-8351-bb532b220df0</code>），<code>bookings.quantity</code> 固定记为 <code>1</code>（代表 1 份订阅合同行，而非 1 个 Seat），导致此前直接对 <code>bookings.quantity</code> 求和时将 vivo 的 9 次月度/变更行误算为 <code>9 席</code>。</li>
+                <li><strong>校准方案与核心修复结果</strong>：在 <code>scripts/extract_revenue_pipeline.py</code> 中通过 <code>subscription_id</code> 关联 <code>concord-prod.service_cloudbi.subscriptions</code> 最新分区的 <code>metric_quantity</code> 字段，并按唯一 <code>contract_key</code> 去重汇总有效席位数：
+                  <ul>
+                    <li><strong>Jaden (<code>jadenwang</code>) — <code>vivo Mobile Communication Co., Ltd</code></strong>：<code>2026-10-10</code> 新下单 <code>$19,647.00</code>（1个月期 Plus），席位数由 <code>9 席</code>（单笔 <code>1 席</code>）修正为真实 <strong><code>324 席</code></strong>（<code>324 席 × $60.64/月 = $19,647.00</code>，YTD 累计 Net iACV <code>$96,410.70</code>）。</li>
+                    <li><strong>Winstoon — <code>Shenzhen Daotong Technology</code></strong>：<code>2026-10-06</code> 新下单 <code>$6,039.19</code> 真实席位数修正为 <strong><code>100 席</code></strong>（YTD 3 份订阅合同合计由 <code>33 席</code> 修正为 <strong><code>300 席</code></strong>）。</li>
+                    <li><strong>Kennethdeng — <code>GAC Group</code></strong>（<code>$32,413.19</code> 年单）：由 <code>1 席</code> 修正为 <strong><code>95 席</code></strong>；<strong>Hisense / Insilico / Huabao / TCL / Chery / UGREEN</strong> 年单均由 <code>1~2 席</code> 修正为 <strong><code>50 席</code></strong>；<strong>Wendylv — <code>Huami, Inc.</code></strong>（<code>2026-10-08</code> 新单 <code>$931.94</code>）由 <code>1 席</code> 修正为 <strong><code>30 席</code></strong>；全领地 GE 有效总席位数由 <code>4,283 席</code> 校准为 <strong><code>6,289 席</code></strong>。</li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+          </ul>
+          <div class="impact-box">
+            <strong>涉及文件：</strong> <code>scripts/extract_revenue_pipeline.py</code>, <code>scripts/setup_bqca_knowledge_catalog.py</code>, <code>app/main.py</code>, <code>app/templates/index.html</code>, <code>app/templates/releasenotes.html</code>, <code>SDD_cn.md</code>, <code>SDD_en.md</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- v1.12.0 -->
+      <div class="release-card" data-cat="agent ui">
+        <div class="release-dot"></div>
+        <div class="release-header">
+          <div class="release-title-group">
+            <span class="ver-badge">v1.12.0</span>
             <span class="release-title">GCP Project 级细粒度 MRR &amp; DRR 曲线长尾查询升级：新增 3 张 Project 级治理表 · 工作台一键速查双曲线 · AI 对话气泡内自动渲染交互式趋势曲线图</span>
             <span class="pill pill-purple">🤖 AI Agent 与语义治理</span>
             <span class="pill pill-blue">🎨 前端交互与可视化</span>

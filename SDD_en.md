@@ -1,7 +1,7 @@
-# Software Design Document (SDD v1.12): 2026 Industry Revenue, RunRate & Three-Bucket Quota Portal (with BQCA + Knowledge Catalog Semantic Engine, GCP Project-Level MRR/DRR Curves, Stateless Long-Lived Session Auth & 4-Tier Caching Architecture)
+# Software Design Document (SDD v1.13): 2026 Industry Revenue, RunRate & Three-Bucket Quota Portal (with BQCA + Knowledge Catalog Semantic Engine, Dedicated Project-Level MRR/DRR Curve Tab, GE Subscriptions True Seat Calibration, Stateless Long-Lived Session Auth & 4-Tier Caching Architecture)
 
-- **Document Version**: `v1.12 (Production Release)`
-- **Last Updated**: `2026-10-15`
+- **Document Version**: `v1.13 (Production Release)`
+- **Last Updated**: `2026-10-16`
 - **Target Audience**: `Google Cloud Regional & Industry Verticals (BHI / Manufacturing / Retail / FSI / Auto / Gaming — Replicable Across Any Territory)`
 - **Target GCP Project & Dataset**: `<YOUR_PROJECT_ID>.<YOUR_DATASET>` (e.g., `bhi_manu`)
 - **BQCA Data Agent Resource**: `projects/<YOUR_PROJECT_ID>/locations/global/dataAgents/bhi-manu-2026-agent`
@@ -27,9 +27,9 @@ In daily operations across Google Cloud regional and industry verticals, sales l
 - **100% Metric Alignment with `go/plan2100` & `go/rainmaker`**: Automatically reconcile Territory and Street-Level NAL performance across Bucket 1 (`GCP iRevenue`), Bucket 2 (`DA, DB & Cloud AI iRevenue`), and Bucket 3 (`Gemini Enterprise Net ACV`), incorporating Account-Level Zero-Floor rules, the 25% Marketplace Quota Cap, Bucket 2 1P-Only filtering, and an explicit As-of Date reconciliation banner.
 - **Stateless 7-Day Session + Sliding Expiration Authentication + Zero Pre-Login Information Exposure**: Exchange the 1-hour Google OIDC `id_token` for an application-signed **7-day (`604800s`) stateless `HS256` `HttpOnly` Session Cookie** (`argolis_app_session`). Automatically renew the cookie when remaining TTL drops below 50% (3.5 days), and enforce **Zero Pre-Login Information Exposure** by serving only a clean 3.4 KB login gate shell before authentication (exposing zero business DOM, metric names, or allowlisted user emails).
 - **Four-Tier Frontend & Backend Caching Architecture (0ms Instant Refresh + 5-Step Progress Bar)**: Combine a browser `localStorage` snapshot cache (L1, 6-hour TTL + background Stale-While-Revalidate version check), `sessionStorage` DRR trend curve cache (L2, `0ms` chart redraw on RVP/Gross tab switch), backend concurrent query execution with 1-hour in-memory caching (L3), and a top-bar one-click Force Refresh button (L4) to eliminate redundant BigQuery queries on page refresh (`F5`). On initial cold load, display an interactive 5-step calculation progress bar instead of `$0` placeholders.
-- **Three-Tier Aggregation & Interactive Daily RunRate (DRR) Drill-Down (NAL + Account + GCP Project ID)**: Provide **NAL-level (Tier 1)**, **Account-level (Tier 2)**, and **GCP Project ID-level (Tier 3)** monthly MRR and daily **DRR** time-series curves.
-- **Governed Long-Tail Analytics via BQCA + Knowledge Catalog + Inline Auto-Curve Rendering**: Leverage native **BigQuery Conversational Analytics (`geminidataanalytics.googleapis.com/v1beta`)** and **Knowledge Catalog (`dataplex.googleapis.com/v1`)** to inject 14 tables / 374 column descriptions, 9 governed business glossary terms, and 9 verified golden SQL examples into a governed Data Agent, paired with automatic **inline Chart.js time-series curve rendering** inside AI chat bubbles.
-- **Full Auditability (Release Notes) & 15-Minute Replicability**: Include a standalone Release Notes & Audit Changelog page (`/releasenotes`, documenting `v1.0.0` through `v1.12.0`) and modular ETL/governance scripts so any global regional or vertical team can clone and deploy the entire stack in 15 minutes.
+- **Three-Tier Aggregation & Interactive Daily RunRate (DRR) Drill-Down (NAL + Account + Dedicated GCP Project ID Tab)**: Provide **NAL-level (Tier 1)**, **Account-level (Tier 2)**, and a dedicated top-level **Tab 5 (`🔍 Project-Level MRR & DRR Curves`, covering 5,078 named GCP projects with an interactive Top 300 Projects table)** monthly MRR and daily **DRR** time-series curves.
+- **Governed Long-Tail Analytics via BQCA + Knowledge Catalog + Past 2 Weeks GE Orders + Inline Auto-Curve Rendering**: Leverage native **BigQuery Conversational Analytics (`geminidataanalytics.googleapis.com/v1beta`)** and **Knowledge Catalog (`dataplex.googleapis.com/v1`)** to inject 15 tables / 396 column descriptions (including the granular order-line table `customer_ge_orders_2026` and `subscriptions.metric_quantity` calibrated seat counts), 9 governed business glossary terms, and 10 verified golden SQL examples into a governed Data Agent, paired with automatic **inline Chart.js time-series curve rendering** inside AI chat bubbles.
+- **Full Auditability (Release Notes) & 15-Minute Replicability**: Include a standalone Release Notes & Audit Changelog page (`/releasenotes`, documenting `v1.0.0` through `v1.13.0`) and modular ETL/governance scripts so any global regional or vertical team can clone and deploy the entire stack in 15 minutes.
 
 ---
 
@@ -154,10 +154,13 @@ In `scripts/extract_revenue_pipeline.py`, product hierarchies follow `go/plan210
          $$\text{Pre-Watermark Net iACV} = \text{New/Expansion GE ACV} \times 100\% + \text{New/Expansion FSP ACV} \times 10\%$$
      - **Step 3 (Monthly Watermark & De-booking Adjustment `watermark_adjustment`)**:
        - Align with `service_cloudbi.nal_reporting` (`product = 'AGENTSPACE'`, `quota_metric_Basis = 'NETACV_MONTHLY'`), deducting historical monthly watermarks and de-bookings to match `go/rainmaker` final attainment (`rainmaker_final_attainment`) 100%.
+     - **Step 4 (GE Licensed Seat Count `total_seats` / `seats` Calibration via `subscriptions.metric_quantity`)**:
+       - In `concord-prod.service_cloudbi.bookings`, only offline Salesforce CPQ contracts (`order_number` starting with `006...`) store the true seat count in `bookings.quantity`, whereas Console / Self-Serve monthly or annual subscriptions (`subscription_id` is a UUID, such as `vivo Mobile Communication Co., Ltd`'s monthly Plus subscription) always record `bookings.quantity = 1` (representing 1 subscription contract line rather than 1 licensed seat).
+       - The pipeline joins `concord-prod.service_cloudbi.subscriptions` (latest partition) on `b.subscription_id = s.subscription_id` to extract the true `metric_quantity` (`COALESCE(s.metric_quantity, b.quantity)`), deduplicating active seats per `COALESCE(subscription_id, order_number)` in `customer_ge_bookings_2026` while storing exact per-order seat counts in `customer_ge_orders_2026` (e.g., `jadenwang`'s `2026-10-10` `vivo` order = `324 seats / $19,647.00`).
 
 ---
 
-## 5. Target Data Warehouse Schema (`<YOUR_PROJECT_ID>.bhi_manu` — 14 Tables)
+## 5. Target Data Warehouse Schema (`<YOUR_PROJECT_ID>.bhi_manu` — 15 Tables)
 
 | # | Table ID | Grain | Primary Purpose & Corresponding UI View |
 | :---: | :--- | :--- | :--- |
@@ -165,16 +168,17 @@ In `scripts/extract_revenue_pipeline.py`, product hierarchies follow `go/plan210
 | 2 | `nal_revenue_scorecard_2026` | `nal_name` (NAL) | NAL-level YTD RVP/Gross revenue, latest single-day DRR, current/prior month MRR & AI penetration rate (Tab 1 & Tab 2 Tier-1 table) |
 | 3 | `customer_monthly_revenue` | `reporting_id × year_month` | Account × monthly cumulative RunRate (MRR) and monthly average DRR (Monthly trend charts & MoM analysis) |
 | 4 | `customer_daily_runrate` | `reporting_id × usage_date` | YTD daily RunRate (DRR through `T-2`), MTD cumulative & 7-day moving average (powers both NAL-level and Account-level daily DRR curves) |
-| 5 | `customer_ge_bookings_2026` | `reporting_id × sku_description` | Gemini Enterprise & Gen AI FSP customer contracts, seats, TCV, 100% Signed ACV & weighted Net iACV (Tab 3 Tier-2 table) |
-| 6 | `nal_ge_bookings_2026` | `nal_name` (NAL) | NAL-level summary of GE booked accounts, seats, raw signed ACV, pre-watermark Net iACV & Rainmaker final attainment (Tab 3 Tier-1 table) |
-| 7 | `ge_monthly_bookings_2026` | `year_month` (Month) | Monthly GE New, Expansion, Renewal & Net Incremental bookings trend (Tab 3 monthly bar chart) |
-| 8 | `nal_three_buckets_quota_2026` | `nal_id` (Street NAL) | **Core Quota Reconciliation Table**: PY Baseline, Gross/Incremental Quota, YTD Actuals & Attainment % across all 3 buckets (Top Banner & Tab 4) |
-| 9 | `territory_quarterly_quota_2026` | `quarter × product` | Q1–Q4 quarterly breakdown of PY Baseline, Quota & Actuals by compensation product line (Tab 4 Section 3) |
-| 10 | `customer_product_revenue_daily` | `reporting_id × usage_date × fph_l3` | Fine-grained daily account × product consumption for deep drill-down queries |
-| 11 | `customer_ge_details_2026` | `reporting_id × fph_l5` | Billing-side GE sub-product consumption details |
-| 12 | `project_revenue_scorecard_2026` | `project_id × billing_account_id` | **GCP Project-Level Scorecard**: 2026 YTD totals, Sep/Oct MRR, latest single-day DRR & 7d avg across all 5,414 GCP projects (Tab 5 Workbench & BQCA) |
-| 13 | `project_monthly_revenue` | `project_id × year_month` | **GCP Project Monthly MRR Table**: 2026-01 through 2026-10 monthly MRR and average DRR curves for all 5,414 projects |
-| 14 | `project_daily_runrate` | `project_id × usage_date` | **GCP Project Daily DRR Curve Table**: Partitioned by `usage_date` and clustered by `project_id`, storing daily DRR curves & 7-day moving averages |
+| 5 | `customer_ge_bookings_2026` | `reporting_id × sku_description` | Gemini Enterprise & Gen AI FSP customer contracts, calibrated active seat counts (`total_seats`), latest order seats (`latest_order_seats`), TCV, 100% Signed ACV & weighted Net iACV (Tab 3 Tier-2 table) |
+| 6 | `customer_ge_orders_2026` | `booking_date × order_number` | **Granular GE Order-Line Table**: Every individual GE & Gen AI FSP order with exact `booking_date`, NAL, account, SKU, calibrated `seats`, and ACV (powers "Past 2 Weeks Newly Booked GE Orders") |
+| 7 | `nal_ge_bookings_2026` | `nal_name` (NAL) | NAL-level summary of GE booked accounts, calibrated total seats, raw signed ACV, pre-watermark Net iACV & Rainmaker final attainment (Tab 3 Tier-1 table) |
+| 8 | `ge_monthly_bookings_2026` | `year_month` (Month) | Monthly GE New, Expansion, Renewal & Net Incremental bookings trend (Tab 3 monthly bar chart) |
+| 9 | `nal_three_buckets_quota_2026` | `nal_id` (Street NAL) | **Core Quota Reconciliation Table**: PY Baseline, Gross/Incremental Quota, YTD Actuals & Attainment % across all 3 buckets (Top Banner & Tab 4) |
+| 10 | `territory_quarterly_quota_2026` | `quarter × product` | Q1–Q4 quarterly breakdown of PY Baseline, Quota & Actuals by compensation product line (Tab 4 Section 3) |
+| 11 | `customer_product_revenue_daily` | `reporting_id × usage_date × fph_l3` | Fine-grained daily account × product consumption for deep drill-down queries |
+| 12 | `customer_ge_details_2026` | `reporting_id × fph_l5` | Billing-side GE sub-product consumption details |
+| 13 | `project_revenue_scorecard_2026` | `project_id × billing_account_id` | **GCP Project-Level Scorecard**: 2026 YTD totals, Sep/Oct MRR, latest single-day DRR & 7d avg across all 5,414 GCP projects (Tab 5 Dedicated View & BQCA) |
+| 14 | `project_monthly_revenue` | `project_id × year_month` | **GCP Project Monthly MRR Table**: 2026-01 through 2026-10 monthly MRR and average DRR curves for all 5,414 projects |
+| 15 | `project_daily_runrate` | `project_id × usage_date` | **GCP Project Daily DRR Curve Table**: Partitioned by `usage_date` and clustered by `project_id`, storing daily DRR curves & 7-day moving averages |
 
 ---
 

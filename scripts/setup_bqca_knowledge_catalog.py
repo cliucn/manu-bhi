@@ -226,34 +226,72 @@ TABLE_SPECS: Dict[str, Dict[str, Any]] = {
     },
     "customer_ge_bookings_2026": {
         "description": (
-            "【BHI Manufacturing 2026 Gemini Enterprise (GE) 客户签约合同明细表】"
-            "源自 concord-prod.service_cloudbi.bookings，记录 2026 年所有签约 Gemini Enterprise 及 Gen AI FSP 的客户订单、"
-            "SKU 描述、授权席位数 (Seats)、签约总合同额 (Signed TCV)、100% 原始年化签约额 (Signed ACV 合计 $768,127.39)、"
-            "新签/扩容/续约拆分，以及按 go/plan2100 折算（100% GE + 10% FSP，剔除续约）后的水位线前净增签约额 (net_iacv 合计 $762,210.33)。"
+            "【BHI Manufacturing 2026 Gemini Enterprise (GE) 客户签约合同汇总表（含 Subscriptions 席位数校准）】"
+            "源自 concord-prod.service_cloudbi.bookings 关联 concord-prod.service_cloudbi.subscriptions.metric_quantity，"
+            "记录 2026 年所有签约 Gemini Enterprise 及 Gen AI FSP 的客户订单、SKU 描述、经校准的真实授权总席位数 (total_seats)、"
+            "最近一次签约订单席位数 (latest_order_seats) 与最近一次签约 ACV (latest_order_acv)、签约总合同额 (Signed TCV)、"
+            "100% 原始年化签约额 (Signed ACV)、新签/扩容/续约拆分，以及按 go/plan2100 折算（100% GE + 10% FSP，剔除续约）后的净增签约额 (net_iacv)。"
         ),
-        "synonyms": ["GE 客户签约表", "Gemini Enterprise 订单表", "GE Bookings"],
+        "synonyms": ["GE 客户签约表", "Gemini Enterprise 订单汇总表", "GE Bookings"],
         "tags": ["ge", "gemini_enterprise", "bookings", "acv", "tcv", "seats", "bucket_3"],
         "columns": {
             "reporting_id": "签约客户唯一 Reporting ID",
-            "account_name": "签约客户名称 (如 Huami, Inc.、Xiaomi、OPPO 等)",
-            "nal_name": "所属一线销售 NAL 名称",
+            "account_name": "签约客户名称 (如 Shenzhen SDMC、vivo Mobile Communication、BYD、Midea 等)",
+            "nal_name": "所属一线销售 NAL 名称 (如 CN Manu - Mobile ENT Manu (jadenwang))",
             "product_l3": "签约产品三级分类（'Gemini Enterprise' 按 100% 计入，'Gen AI FSP' 按 10% 计入）",
-            "sku_description": "签约 SKU 详细产品与版本描述（如 Gemini Enterprise Standard / Plus）",
-            "order_type": "订单类型 (New / Expansion / Renewal / Cancellation)",
-            "booking_type": "Booking 记账类型",
+            "sku_description": "签约 SKU 详细产品与版本描述（如 Gemini Enterprise Standard / Plus - one month / one year term）",
+            "order_type": "订单类型 (STANDARD_LINE_TYPE 等)",
+            "booking_type": "Booking 记账类型 (Commit)",
             "deal_lines": "合同明细行数",
             "orders_count": "签约订单笔数",
-            "total_seats": "签约授权总席位数 (Seats)",
+            "total_seats": "经 subscriptions.metric_quantity 校准后的真实有效授权总席位数 (Seats，如 jadenwang 的 vivo 订单为 324 席，SDMC 为 2000 席，Daotong 为 300 席)",
+            "latest_order_seats": "最近一笔正向签约订单的授权席位数 (Seats，如 vivo 在 2026-10-10 新下单为 324 席)",
+            "latest_order_acv": "最近一笔正向签约订单的签约年化金额 (USD，如 vivo 在 2026-10-10 新下单为 $19,647.00)",
             "first_booking_date": "首次签约日期 (DATE)",
-            "latest_booking_date": "最近一次签约日期 (DATE，含 2026-10-08 华米新增签约)",
+            "latest_booking_date": "最近一次签约日期 (DATE)",
             "signed_tcv": "签约总合同金额 (Signed Total Contract Value, USD)",
-            "signed_acv": "100% 原始签约年化合同金额 (Signed ACV, USD，全领地合计 $768,127.39)",
+            "signed_acv": "100% 原始签约年化合同金额 (Signed ACV, USD)",
             "comp_new_acv": "新签年化金额 (New ACV, USD)",
             "comp_expansion_acv": "扩容年化金额 (Expansion ACV, USD)",
-            "comp_renewal_acv": "续约年化金额 (Renewal ACV, USD，全领地合计 $4,159.62，不计入净增 Net ACV)",
+            "comp_renewal_acv": "续约年化金额 (Renewal ACV, USD，不计入净增 Net ACV)",
             "raw_net_iacv": "未做 FSP 10% 权重折算前的净增 iACV (New + Expansion, USD)",
-            "net_iacv": "按 go/plan2100 规则（剔除续约 + Gen AI FSP 按 10% 折算）计算的水位线冲减前净增 Net iACV (USD，全领地合计 $762,210.33)",
+            "net_iacv": "按 go/plan2100 规则（剔除续约 + Gen AI FSP 按 10% 折算）计算的净增 Net iACV (USD)",
             "total_comp_acv": "计入薪酬核算口径的总 ACV (USD)",
+        },
+    },
+    "customer_ge_orders_2026": {
+        "description": (
+            "【BHI Manufacturing 2026 Gemini Enterprise (GE) 逐笔订单明细流水表（支持“过去两周新下单的 GE”等按日期长尾查询）】"
+            "记录 2026-01-01 至今每一笔 Gemini Enterprise 与 Gen AI FSP 订单行的精确下单日期 (booking_date)、"
+            "所属销售代表 NAL (nal_name)、客户名称 (account_name)、签约 SKU (sku_description)、订单号 (order_number)、"
+            "订阅 ID (subscription_id)、订单状态 (line_status)、原始 bookings.quantity (raw_booking_qty)、"
+            "关联 concord-prod.service_cloudbi.subscriptions.metric_quantity 校准后的真实授权席位数 (seats，如 2026-10-10 jadenwang 下 vivo 订单为 324 席 / $19,647.00)、"
+            "单笔签约 TCV (signed_tcv)、单笔签约 ACV (signed_acv) 与折算后 Net iACV (net_iacv)。"
+            "当用户查询『过去两周新下单的 GE』、『近期新签 GE 订单』或某销售代表（如 jadenwang）具体某天的 GE 订单与席位数时，请优先查询此表！"
+        ),
+        "synonyms": ["GE 逐笔订单明细表", "过去两周新下单的 GE", "近期新签 GE 订单表", "GE Order Lines"],
+        "tags": ["ge", "orders", "recent_bookings", "past_two_weeks", "seats", "jadenwang", "vivo"],
+        "columns": {
+            "booking_date": "订单签约入账日期 (DATE, YYYY-MM-DD，可用于筛选过去两周新下单的 GE)",
+            "year_month": "签约所属自然年月 ('YYYY-MM')",
+            "reporting_id": "签约客户唯一 Reporting ID",
+            "account_name": "签约客户名称 (Account Name)",
+            "nal_name": "所属一线销售 NAL 名称（含销售代表 LDAP，如 CN Manu - Mobile ENT Manu (jadenwang)）",
+            "product_l3": "签约产品三级分类 ('Gemini Enterprise' 或 'Gen AI FSP')",
+            "sku_description": "签约 SKU 详细产品与期限描述",
+            "order_type": "订单类型",
+            "booking_type": "Booking 记账类型",
+            "order_number": "订单号 (Salesforce 006 合同号或 Console UUID)",
+            "subscription_id": "云平台订阅唯一 ID (用于关联 subscriptions.metric_quantity 获取真实席位数)",
+            "line_status": "订单行状态 (ACTIVE / REPLACED;ACTIVE 等)",
+            "raw_booking_qty": "bookings 表原始 quantity 字段（自助按月/按年订阅在 bookings 表中固定记为 1，不可直接当作席位数）",
+            "seats": "关联 subscriptions.metric_quantity 校准后的该笔订单真实授权席位数 (Seats，如 2026-10-10 vivo 订单为 324 席，SDMC 为 2000 席，Daotong 为 100 席，Fosunpharma 为 45 席，Huami 为 30 席)",
+            "signed_tcv": "单笔订单签约总合同金额 (Signed TCV, USD)",
+            "signed_acv": "单笔订单 100% 原始签约年化金额 (Signed ACV, USD)",
+            "comp_new_acv": "单笔新签年化金额 (New ACV, USD)",
+            "comp_expansion_acv": "单笔扩容年化金额 (Expansion ACV, USD)",
+            "comp_renewal_acv": "单笔续约年化金额 (Renewal ACV, USD)",
+            "net_iacv": "单笔按 go/plan2100 折算后的净增 Net iACV (100% GE + 10% FSP, USD)",
         },
     },
     "nal_ge_bookings_2026": {
@@ -848,6 +886,27 @@ WHERE project_id NOT LIKE 'UNASSIGNED_%'
 ORDER BY total_cloud_ai_rvp_rev DESC
 LIMIT 20""",
     },
+    {
+        "naturalLanguageQuestion": (
+            "请帮我查询过去两周（最近 14 天）新下单的所有 Gemini Enterprise (GE) 及 Gen AI FSP 订单明细，列出下单日期、所属 NAL（含销售代表）、客户名称、签约 SKU、真实授权席位数 (Seats)、签约 ACV 及折算后 Net iACV，并按日期从新到旧排序。"
+        ),
+        "sqlQuery": f"""SELECT
+  booking_date,
+  nal_name,
+  account_name,
+  product_l3,
+  sku_description,
+  seats,
+  raw_booking_qty,
+  ROUND(signed_tcv, 2) AS signed_tcv,
+  ROUND(signed_acv, 2) AS signed_acv,
+  ROUND(net_iacv, 2) AS net_iacv,
+  line_status
+FROM `{PROJECT_ID}.{DATASET_ID}.customer_ge_orders_2026`
+WHERE booking_date >= DATE_SUB((SELECT MAX(booking_date) FROM `{PROJECT_ID}.{DATASET_ID}.customer_ge_orders_2026`), INTERVAL 14 DAY)
+  AND signed_acv > 0
+ORDER BY booking_date DESC, signed_acv DESC""",
+    },
 ]
 
 SYSTEM_INSTRUCTION = f"""你是 **BHI Manufacturing 2026 智能数据分析 Agent**，基于 **Google Cloud BigQuery Conversational Analytics (BQCA) + Knowledge Catalog (Dataplex Universal Catalog)** 构建。
@@ -869,7 +928,13 @@ SYSTEM_INSTRUCTION = f"""你是 **BHI Manufacturing 2026 智能数据分析 Agen
      2) `project_monthly_revenue`：查询任意 `project_id` 在 `2026-01` 至 `2026-10` 每个自然月 (`year_month`) 的月度 MRR 走势（按 `ORDER BY year_month ASC` 排序）；
      3) `project_daily_runrate`：查询任意 `project_id` 按天 (`usage_date`) 的每日 DRR 曲线与 7 日移动均值 `gcp_rvp_drr_7d_avg`（按 `ORDER BY usage_date ASC` 排序）。
    - **前端自动曲线渲染约定**：当用户要求查看“曲线”、“趋势”或“走势”时，请确保生成的 SQL 查询结果中包含时间列（`usage_date` 或 `year_month`）以及数值指标列（如 `gcp_rvp_drr`, `cloud_ai_rvp_drr`, `gcp_rvp_mrr`, `cloud_ai_rvp_mrr` 等），并按时间升序排列（`ORDER BY usage_date ASC` 或 `ORDER BY year_month ASC`），前端会自动将该 SQL 结果集绘制成交互式 **Chart.js 折线/柱状趋势曲线图**！
-5. **输出格式规范**：
+5. **过去两周新下单的 GE 与 GE 席位数 (Seats) 口径说明（重要）**：
+   - 当用户查询**“过去两周新下单的 GE”**、**“近期新签的 GE 订单”**或某销售代表（如 Jaden `jadenwang`）近期新下的 GE 单子及席位数时，请优先查询 **`customer_ge_orders_2026`** 表（筛选 `booking_date >= DATE_SUB((SELECT MAX(booking_date) FROM customer_ge_orders_2026), INTERVAL 14 DAY)` 且 `signed_acv > 0`）。
+   - **为什么之前 GE 席位数不准及修复原理**：在源表 `concord-prod.service_cloudbi.bookings` 中，仅 Salesforce 线下合同（`006...` 订单，如 `Shenzhen SDMC` 2,000 席）在 `bookings.quantity` 字段直接记录授权席位数；而所有通过 Console / 自助或月度/年度订阅通道下单的合同（如 Jaden `jadenwang` 名下 `vivo Mobile Communication Co., Ltd` 的月度 Plus 订阅 `191629fc-70d0-44ad-8351-bb532b220df0`），`bookings.quantity` 固定记为 **`1`**（代表 1 份订阅合同行，而非 1 个 Seat），导致此前按 `SUM(bookings.quantity)` 汇总时将 vivo 的 9 个月度/扩容行误算为 `9 席`。现已通过关联 `concord-prod.service_cloudbi.subscriptions.metric_quantity` 完成校准：
+     - **Jaden (`jadenwang`) — `vivo Mobile Communication Co., Ltd`**：在 `2026-10-10` 最新下单金额 **`$19,647.00`**（1个月期 Gemini Enterprise Plus），真实授权席位数为 **`324 席`**（`subscriptions.metric_quantity = 324`），2026 YTD 累计签约 Net iACV 为 **`$96,410.70`**（有效席位数 **`324 席`**）。
+     - **Jiacui — `Shenzhen SDMC Technology Co., Ltd`**：在 `2026-10-10` 新签 1 年期 Plus 订单 **`$780,000.00`**，真实授权席位数 **`2,000 席`**。
+     - **Winstoon — `Shenzhen Daotong Technology`**：在 `2026-10-06` 新下单 **`$6,039.19`**，真实授权席位数 **`100 席`**（YTD 累计 3 份订阅合同共 **`300 席`**）。
+6. **输出格式规范**：
    - 请始终使用结构清晰的 **中文 Markdown** 回答（包含核心结论、格式化表格、业务洞察或行动建议）。
    - 美元金额统一格式化为 `$1,234.56`，百分比保留 2 位小数。
 """
@@ -976,7 +1041,7 @@ def provision_dataplex_knowledge_catalog_glossary(session: AuthorizedSession) ->
 def build_bqca_published_context() -> Dict[str, Any]:
     """Construct the GoogleCloudGeminidataanalyticsV1betaContext payload linking all tables, schemas, glossary terms, and verified queries."""
     table_references = []
-    # Core 12 tables for BQCA Data Agent context (including Project-level MRR/DRR curves & scorecard)
+    # Core 13 tables for BQCA Data Agent context (including Project-level MRR/DRR curves & granular GE order lines)
     core_tables = [
         "nal_three_buckets_quota_2026",
         "customer_revenue_scorecard_2026",
@@ -987,6 +1052,7 @@ def build_bqca_published_context() -> Dict[str, Any]:
         "project_monthly_revenue",
         "project_daily_runrate",
         "customer_ge_bookings_2026",
+        "customer_ge_orders_2026",
         "nal_ge_bookings_2026",
         "ge_monthly_bookings_2026",
         "territory_quarterly_quota_2026",

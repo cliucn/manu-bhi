@@ -900,7 +900,7 @@
     </div>
   </header>
 
-  <!-- Top Mode Navigation Bar: RVP (Default) vs Gross vs GE vs Quota vs AI Agent -->
+  <!-- Top Mode Navigation Bar: RVP (Default) vs Gross vs GE vs Quota vs Project Curve vs AI Agent -->
   <div class="top-nav">
     <div class="nav-tab active" id="tabRvp" onclick="switchMode('rvp')">
       <span>📊 销售认账视图 (RVP Revenue)</span>
@@ -917,6 +917,10 @@
     <div class="nav-tab quota" id="tabQuota" onclick="switchMode('quota')">
       <span>🎯 NAL 与整体三大桶 Quota 达成汇总</span>
       <span class="pill pill-green">3 Buckets</span>
+    </div>
+    <div class="nav-tab" id="tabProject" onclick="switchMode('project')">
+      <span>🔍 Project 级 MRR &amp; DRR 曲线</span>
+      <span class="pill pill-blue">5,078 Projects</span>
     </div>
     <div class="nav-tab agent" id="tabAgent" onclick="switchMode('agent')">
       <span>🤖 AI 数据分析 Agent · 长尾查询</span>
@@ -1345,31 +1349,13 @@
       </div>
     </div>
 
-    <!-- View 5: AI Data Analytics Agent (BQCA + Knowledge Catalog for Long-Tail Ad-Hoc Queries) -->
-    <div id="agentView" style="display:none;">
-      <div class="agent-hero">
-        <div>
-          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
-            <h2 style="font-size:17px; color:#174ea6; margin:0;">🤖 BHI Manufacturing 2026 智能数据分析 Agent · 长尾与 Project 细粒度曲线查询</h2>
-            <span class="pill pill-purple">BigQuery Conversational Analytics API (v1beta)</span>
-            <span class="pill pill-blue">Knowledge Catalog 语义治理 (14 表 · 374 列 · 9 项业务术语 · 9 组黄金验证 SQL)</span>
-            <span class="pill pill-green">📈 支持 Project ID 级 MRR &amp; DRR 曲线自动渲染</span>
-          </div>
-          <p style="font-size:13px; color:var(--text-secondary);">
-            基于 Google Cloud 原生 <strong>BQCA (<code>geminidataanalytics.googleapis.com</code>) + Knowledge Catalog (<code>bhi-manu-2026-glossary</code>)</strong> 架构，现已扩展接入 <strong>GCP Project 级细粒度账单模型（覆盖全领地 5,414 个 Project ID 的月度 MRR 与每日 DRR 曲线）</strong>。您既可在下方<strong>工作台一键速查任意 <code>project_id</code> 的 MRR/DRR 曲线</strong>，也可直接在<strong>AI 对话框</strong>中提问，AI 返回的时序数据将<strong>自动在气泡内渲染为交互式曲线图</strong>！
-          </p>
-        </div>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <button class="btn-action" style="padding:6px 12px; font-size:12px;" onclick="clearAgentChat()">🗑️ 清空对话</button>
-        </div>
-      </div>
-
-      <!-- NEW: Interactive GCP Project ID MRR & DRR Curve Quick-Lookup Workbench -->
+    <!-- View 5: Dedicated GCP Project-Level MRR & DRR Curve Workbench View -->
+    <div id="projectView" style="display:none;">
       <div class="section-card" id="projectCurveWorkbench" style="border:1px solid #d2e3fc; background:linear-gradient(180deg, #f8fbff 0%, #ffffff 42%); margin-bottom:18px;">
         <div class="section-header" style="border-bottom:1px solid #e8f0fe; padding-bottom:12px; margin-bottom:14px;">
           <div class="section-title" style="flex-wrap:wrap; gap:8px;">
-            <span style="font-size:15px; font-weight:700; color:#174ea6;">🔍 GCP Project ID 细粒度 MRR &amp; DRR 曲线速查工作台 (Project-Level RunRate Explorer)</span>
-            <span class="pill pill-blue" id="projTotalCountBadge">已治理 5,414 个 GCP Project</span>
+            <span style="font-size:16px; font-weight:700; color:#174ea6;">🔍 GCP Project ID 细粒度 MRR &amp; DRR 曲线速查工作台 (Project-Level RunRate Explorer)</span>
+            <span class="pill pill-blue" id="projTotalCountBadge">已治理 5,078 个命名 GCP Project</span>
             <span class="pill pill-purple">支持 RVP / Gross 双口径切换与 AI 一键下钻</span>
           </div>
           <div class="filters-bar" style="flex-wrap:wrap; gap:8px;">
@@ -1383,7 +1369,7 @@
               <input type="text" id="projCustomInput" class="input-search" style="width:210px;" placeholder="输入任意 project_id 或编号..." onkeydown="if(event.key==='Enter'){event.preventDefault(); searchCustomProjectCurve();}">
               <button class="btn-action" style="background:#1a73e8; color:#fff; border-color:#1a73e8; font-weight:600;" onclick="searchCustomProjectCurve()">📈 查曲线</button>
             </div>
-            <select id="projMetricModeSelect" class="input-select" onchange="renderCurrentProjectCharts()">
+            <select id="projMetricModeSelect" class="input-select" onchange="renderCurrentProjectCharts(); renderTopProjectsTable();">
               <option value="rvp">RVP 销售认账口径 (默认)</option>
               <option value="gross">Gross 毛出账口径</option>
             </select>
@@ -1432,7 +1418,7 @@
               <span style="font-size:13px; font-weight:700; color:#1e293b;" id="projMrrChartTitle">📊 Project 自然月度 MRR 走势 (2026-01 ~ 2026-10)</span>
               <span class="pill pill-blue" style="font-size:11px;">project_monthly_revenue</span>
             </div>
-            <div style="height:245px;">
+            <div style="height:260px;">
               <canvas id="projMrrCanvas"></canvas>
             </div>
           </div>
@@ -1441,30 +1427,86 @@
               <span style="font-size:13px; font-weight:700; color:#1e293b;" id="projDrrChartTitle">📈 Project 每日 Daily Run Rate (DRR) 曲线与 7日均线</span>
               <span class="pill pill-purple" style="font-size:11px;">project_daily_runrate</span>
             </div>
-            <div style="height:245px;">
+            <div style="height:260px;">
               <canvas id="projDrrCanvas"></canvas>
             </div>
           </div>
         </div>
       </div>
 
+      <!-- Interactive Top GCP Projects Scorecard Table (Click Row to Switch Curve) -->
+      <div class="section-card">
+        <div class="section-header">
+          <div class="section-title">
+            <span>📋 全领地 Top GCP Projects 2026 收入与 RunRate 计分卡明细 (点击第一列 <code>project_id</code> 直接切换上方 MRR &amp; DRR 双曲线 📈)</span>
+            <span class="pill pill-blue" id="projTableCountPill">300 Projects</span>
+          </div>
+          <div class="filters-bar">
+            <input type="text" id="projTableSearchInput" class="input-search" style="width:260px;" placeholder="搜索 project_id、客户名称或 NAL..." oninput="renderTopProjectsTable()">
+          </div>
+        </div>
+        <div class="table-container" style="max-height:540px; overflow-y:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>GCP Project ID (点击查看双曲线 📈)</th>
+                <th>项目名称 / Number</th>
+                <th>所属客户 (Account)</th>
+                <th>NAL 业务分组</th>
+                <th class="text-num">2026 YTD GCP 收入</th>
+                <th class="text-num">桶 2: DA+DB+AI</th>
+                <th class="text-num">其中: Cloud AI</th>
+                <th class="text-num">AI 渗透率</th>
+                <th class="text-num">最新单日 DRR</th>
+                <th class="text-num">近7日日均 DRR</th>
+                <th class="text-num">10月 MTD MRR</th>
+                <th class="text-num">9月全月 MRR</th>
+                <th class="text-num">日均 DRR 环比</th>
+              </tr>
+            </thead>
+            <tbody id="topProjectsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- View 6: AI Data Analytics Agent (BQCA + Knowledge Catalog for Long-Tail Ad-Hoc Queries) -->
+    <div id="agentView" style="display:none;">
+      <div class="agent-hero">
+        <div>
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
+            <h2 style="font-size:17px; color:#174ea6; margin:0;">🤖 BHI Manufacturing 2026 智能数据分析 Agent · 长尾查询专区</h2>
+            <span class="pill pill-purple">BigQuery Conversational Analytics API (v1beta)</span>
+            <span class="pill pill-blue">Knowledge Catalog 语义治理 (15 表 · 396 列 · 9 项业务术语 · 10 组黄金验证 SQL)</span>
+            <span class="pill pill-green">✨ 已接入 GE 逐笔订单流水与 Subscriptions 真实席位数校准</span>
+          </div>
+          <p style="font-size:13px; color:var(--text-secondary);">
+            基于 Google Cloud 原生 <strong>BQCA (<code>geminidataanalytics.googleapis.com</code>) + Knowledge Catalog (<code>bhi-manu-2026-glossary</code>)</strong> 架构，统一纳管 15 张 BigQuery 治理表（含最新新增的 <strong>GE 逐笔订单明细表 <code>customer_ge_orders_2026</code></strong>，支持秒查<strong>「过去两周新下单的 GE 订单与校准后真实席位数」</strong>）。如需按 Project ID 查看交互式 MRR/DRR 双曲线工作台，请点击顶部导航栏切换至 <strong>「🔍 Project 级 MRR &amp; DRR 曲线」</strong> 专有页面。
+          </p>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="btn-action" style="padding:6px 12px; font-size:12px;" onclick="switchMode('project')">🔍 前往 Project 曲线专区</button>
+          <button class="btn-action" style="padding:6px 12px; font-size:12px;" onclick="clearAgentChat()">🗑️ 清空对话</button>
+        </div>
+      </div>
+
       <!-- One-click Preset Long-Tail Queries -->
       <div class="preset-grid">
+        <div class="preset-card" style="border-left:4px solid #e11d48; background:linear-gradient(135deg, #fff1f2 0%, #ffffff 100%);" onclick="askAgentPreset('请帮我查询过去两周（最近 14 天）新下单的所有 Gemini Enterprise (GE) 及 Gen AI FSP 订单明细，列出下单日期、所属 NAL（含销售代表）、客户名称、签约 SKU、真实授权席位数 (Seats)、签约 ACV 及折算后 Net iACV，并按日期从新到旧排序。')">
+          <div class="preset-card-title" style="color:#be123c;">✨ 1. 过去两周新下单的 GE 订单与席位数明细 (常用高频)</div>
+          <div class="preset-card-desc">基于 `customer_ge_orders_2026` 列出最近 14 天新签的所有 GE 订单（含 Jaden `jadenwang` 下 `vivo` 324 席 / $19,647、SDMC 2,000 席 / $780,000、Daotong 100 席等）。</div>
+        </div>
+        <div class="preset-card" style="border-left:3px solid #9334e6;" onclick="askAgentPreset('请帮我查询 Jaden (jadenwang) 名下 vivo Mobile Communication Co., Ltd 在 2026 年的所有 Gemini Enterprise (GE) 签约订单明细，包含每次下单日期、真实授权席位数 (Seats vs 原始 bookings.quantity)、单笔签约 ACV 及全年累计 Net iACV。')">
+          <div class="preset-card-title">🎯 2. Jaden (`jadenwang`) vivo GE 订单与 324 席位核查</div>
+          <div class="preset-card-desc">穿透核查 `vivo Mobile Communication Co., Ltd` 的月度 Plus 订阅历史订单流水与 `subscriptions.metric_quantity` 校准后的 324 席授权明细。</div>
+        </div>
         <div class="preset-card" style="border-left:3px solid #1a73e8;" onclick="askAgentPreset('请查询 Project ID 为 `vivocloudai` 的 2026 年月度 MRR 走势（包含 GCP、Cloud AI、DA、DB 的 RVP MRR 及当月日均 DRR）以及每日 DRR 曲线。')">
-          <div class="preset-card-title">📈 1. 指定 Project ID (`vivocloudai`) 每日 DRR 曲线</div>
+          <div class="preset-card-title">📈 3. 指定 Project ID (`vivocloudai`) 每日 DRR 曲线</div>
           <div class="preset-card-desc">基于 `project_daily_runrate` 查询 `vivocloudai` 的每日 GCP 与 Cloud AI DRR 及 7日均线，自动在对话气泡内绘制交互式曲线图。</div>
         </div>
-        <div class="preset-card" style="border-left:3px solid #9334e6;" onclick="askAgentPreset('请按月度汇总 Project ID `oppo-gcp-prod-159055` 在 2026-01 至 2026-10 每个自然月的 GCP RVP MRR、Cloud AI RVP MRR 与当月日均 DRR 曲线。')">
-          <div class="preset-card-title">📊 2. 指定 Project ID (`oppo-gcp-prod-159055`) 月度 MRR 曲线</div>
-          <div class="preset-card-desc">按自然月查看 OPPO 核心 AI 项目 `oppo-gcp-prod-159055` 的月度 MRR 爬坡走势并自动渲染趋势图。</div>
-        </div>
         <div class="preset-card" style="border-left:3px solid #0d9488;" onclick="askAgentPreset('2026 年 YTD Cloud AI RVP 消费金额最高的 Top 20 GCP Project ID 是哪些？请列出它们的 project_id、所属客户、所属 NAL、YTD Cloud AI RVP 收入、最新单日 DRR 及上月/当月 MRR。')">
-          <div class="preset-card-title">🏆 3. 全领地 Cloud AI Top 20 GCP Project ID 排行</div>
-          <div class="preset-card-desc">跨客户扫描 5,414 个 Project，定位贡献最高 Cloud AI RVP 收入的前 20 个核心生产 Project ID 与最新单日 DRR。</div>
-        </div>
-        <div class="preset-card" onclick="askAgentPreset('请帮我拆解 MANU 整体 GE 签约总额 $768,127.39 与 go/rainmaker 最新认账达成 $713,029.30 之间的三步差异桥梁（含 10月8日华米新增 $931.94、续约剔除 -$4,159.62、FSP 10% 折算 -$1,757.43、以及 fankaia 月度水位线冲减 -$49,181.03），并列出 12 个 NAL 的三大桶达成情况（含 wendylv 桶 1 实绩 $18,426,974.50 / Quota $18,407,282.00 = 100.11%）。')">
-          <div class="preset-card-title">🔍 4. GE $713,029.30 差异拆解 &amp; 12 个 NAL 三大桶核对</div>
-          <div class="preset-card-desc">完整拆解 $768,127.39 → $762,210.33 → $713,029.30 三步对账桥梁及 12 个 NAL 三大桶最新达成率。</div>
+          <div class="preset-card-title">🏆 4. 全领地 Cloud AI Top 20 GCP Project ID 排行</div>
+          <div class="preset-card-desc">跨客户扫描 5,078 个命名 Project，定位贡献最高 Cloud AI RVP 收入的前 20 个核心生产 Project ID 与最新单日 DRR。</div>
         </div>
         <div class="preset-card" onclick="askAgentPreset('帮我查询 2026 年 9 月相比 8 月 Cloud AI RVP MRR 环比增长额（MoM 绝对值与百分比）最高的 Top 10 客户，并列出他们所属的 NAL 和最新单日 DRR。')">
           <div class="preset-card-title">🚀 5. Cloud AI 月度环比高增长 Top 10 客户</div>
@@ -1491,16 +1533,16 @@
             <div class="chat-avatar">🤖</div>
             <div class="chat-bubble">
               <p><strong>您好！我是基于 BigQuery Conversational Analytics (BQCA) + Knowledge Catalog 驱动的 BHI Manufacturing 2026 数据分析 Agent。</strong></p>
-              <p>我已加载 <strong>Knowledge Catalog 业务术语表 (<code>bhi-manu-2026-glossary</code>)</strong>、<strong><code>cliu201-477811.bhi_manu</code> 14 张治理表（含最新扩充的 GCP Project 级月度 MRR 表 <code>project_monthly_revenue</code>、每日 DRR 曲线表 <code>project_daily_runrate</code> 及项目计分卡 <code>project_revenue_scorecard_2026</code>）</strong>。您可以：</p>
+              <p>我已加载 <strong>Knowledge Catalog 业务术语表 (<code>bhi-manu-2026-glossary</code>)</strong> 与 <strong><code>cliu201-477811.bhi_manu</code> 15 张治理表（含最新新增的 GE 逐笔订单明细表 <code>customer_ge_orders_2026</code> 及经 <code>subscriptions.metric_quantity</code> 校准的真实席位数 <code>seats</code>）</strong>。您可以：</p>
               <ul>
-                <li>在上方<strong>「🔍 GCP Project ID 细粒度 MRR &amp; DRR 曲线速查工作台」</strong>直接选择或输入任意 <code>project_id</code>（如 <code>vivocloudai</code>、<code>xiaomi-ind</code>、<code>oppo-gcp-prod-159055</code>、<code>ai-mify-pt-1</code>）秒看双曲线；</li>
-                <li>或在下方用自然语言提问任何 <strong>Project ID / Billing Account / 客户 / NAL 的月度 MRR 与每日 DRR 曲线</strong>，只要 SQL 结果包含日期或月份序列，我都会在对话框内<strong>自动为您绘制交互式折线/柱状趋势图</strong>！</li>
+                <li>点击上方 <strong>「✨ 1. 过去两周新下单的 GE 订单与席位数明细」</strong> 一键拉取最近 14 天所有新下单的 GE 明细（如 Jaden `jadenwang` 下 `vivo` 在 10月10日新签 `$19,647.00` / `324 席`、`jiacui` 下 `Shenzhen SDMC` 在 10月10日新签 `$780,000.00` / `2,000 席` 等）；</li>
+                <li>点击顶部导航栏的 <strong>「🔍 Project 级 MRR &amp; DRR 曲线」</strong> 进入独立的 Project 细粒度双曲线工作台，或直接在下方用自然语言向我提问任何跨表长尾问题！</li>
               </ul>
             </div>
           </div>
         </div>
         <div class="chat-input-bar">
-          <textarea id="agentInput" class="chat-input" rows="3" placeholder="输入您的长尾查询问题（支持基于任意 project_id 查询月度 MRR 或每日 DRR 曲线，如：请画出 project_id 为 ai-mify-pt-1 的 2026 每日 DRR 曲线）..."></textarea>
+          <textarea id="agentInput" class="chat-input" rows="3" placeholder="输入您的长尾查询问题（如：过去两周新下单的 GE 有哪些？Jaden 新下的 vivo GE 单子是多少席位？或查询任意 project_id 的每日 DRR 曲线）..."></textarea>
           <button class="btn-send" id="agentSendBtn" onclick="sendAgentMessage()">发送查询 🚀</button>
         </div>
       </div>
@@ -1533,8 +1575,8 @@
     var currentSelectedCustomer = '';
 
     // Multi-Layer Frontend Cache Configuration
-    var PORTAL_CACHE_KEY = 'bhi_manu_portal_cache_v2';
-    var TREND_CACHE_KEY = 'bhi_manu_trend_cache_v2';
+    var PORTAL_CACHE_KEY = 'bhi_manu_portal_cache_v3';
+    var TREND_CACHE_KEY = 'bhi_manu_trend_cache_v3';
     var PORTAL_CACHE_TTL_MS = 6 * 3600 * 1000; // 6 hours local snapshot TTL
     var _nalTrendCache = {};
     var _custTrendCache = {};
@@ -1835,11 +1877,15 @@
       document.getElementById('tabGross').classList.remove('active');
       document.getElementById('tabGe').classList.remove('active');
       document.getElementById('tabQuota').classList.remove('active');
+      var tabProjEl = document.getElementById('tabProject');
+      if (tabProjEl) tabProjEl.classList.remove('active');
       document.getElementById('tabAgent').classList.remove('active');
 
       document.getElementById('revenueView').style.display = 'none';
       document.getElementById('geView').style.display = 'none';
       document.getElementById('quotaView').style.display = 'none';
+      var projViewEl = document.getElementById('projectView');
+      if (projViewEl) projViewEl.style.display = 'none';
       document.getElementById('agentView').style.display = 'none';
       document.getElementById('fabAgentBtn').style.display = (mode === 'agent') ? 'none' : 'flex';
 
@@ -1863,11 +1909,15 @@
         document.getElementById('territoryBanner').style.display = nalBuckets.length ? 'block' : 'none';
         document.getElementById('quotaView').style.display = 'block';
         renderQuotaView();
+      } else if (mode === 'project') {
+        if (tabProjEl) tabProjEl.classList.add('active');
+        document.getElementById('territoryBanner').style.display = 'none';
+        if (projViewEl) projViewEl.style.display = 'block';
+        initProjectWorkbench();
       } else if (mode === 'agent') {
         document.getElementById('tabAgent').classList.add('active');
         document.getElementById('territoryBanner').style.display = 'none';
         document.getElementById('agentView').style.display = 'block';
-        initProjectWorkbench();
       }
     }
 
@@ -2778,6 +2828,11 @@
       filtered.forEach(g => {
         var tr = document.createElement('tr');
         var accDisplay = g.account_name || g.reporting_id;
+        var totalSeats = g.total_seats || 0;
+        var latestSeats = g.latest_order_seats || totalSeats;
+        var seatsHtml = (latestSeats && latestSeats !== totalSeats)
+          ? `<strong>${totalSeats.toLocaleString()}</strong> <span style="font-size:11px; color:var(--text-secondary);" title="最近一笔订单授权席位数">(最新单: ${latestSeats.toLocaleString()})</span>`
+          : `<strong>${totalSeats.toLocaleString()}</strong>`;
         tr.innerHTML = `
           <td class="clickable-col" onclick="jumpToCustomerTrend('${g.reporting_id}')" title="点击查看 ${accDisplay} 的 2026 每日 Run Rate (DRR) 曲线走势">
             <span class="trend-link-wrap">
@@ -2789,7 +2844,7 @@
           <td><span class="pill ${g.product_l3 === 'Gen AI FSP' ? 'pill-orange' : 'pill-purple'}">${g.product_l3 || '-'}</span></td>
           <td style="max-width:300px; overflow:hidden; text-overflow:ellipsis;" title="${g.sku_description || ''}">${g.sku_description || '-'}</td>
           <td class="text-num">${g.orders_count || 0} 笔 (${g.deal_lines || 0} 行)</td>
-          <td class="text-num">${(g.total_seats || 0).toLocaleString()}</td>
+          <td class="text-num">${seatsHtml}</td>
           <td class="text-num">${fmtUSD2(g.signed_tcv)}</td>
           <td class="text-num" style="color:var(--google-purple);font-weight:700;">${fmtUSD2(g.signed_acv)}</td>
           <td class="text-num" style="color:var(--google-green);font-weight:700;">${fmtUSD2(g.net_iacv)}</td>
@@ -3031,12 +3086,71 @@
         }
         topProjectsList = (data && data.projects) || [];
         populateProjectWorkbenchFilters();
+        renderTopProjectsTable();
         if (topProjectsList.length > 0) {
           await loadProjectCurveWorkbench(topProjectsList[0].project_id);
         }
       } catch (e) {
         console.warn('initProjectWorkbench error:', e);
       }
+    }
+
+    function renderTopProjectsTable() {
+      var tbody = document.getElementById('topProjectsTableBody');
+      if (!tbody) return;
+      var q = ((document.getElementById('projTableSearchInput') && document.getElementById('projTableSearchInput').value) || '').trim().toLowerCase();
+      var custFilter = (document.getElementById('projCustomerFilter') && document.getElementById('projCustomerFilter').value) || '';
+      var mMode = (document.getElementById('projMetricModeSelect') && document.getElementById('projMetricModeSelect').value) || 'rvp';
+      var isRvp = (mMode === 'rvp');
+      var activePid = (currentProjectTrendPayload && currentProjectTrendPayload.project && currentProjectTrendPayload.project.project_id) || '';
+
+      var filtered = topProjectsList.filter(p => {
+        if (custFilter && p.account_name !== custFilter) return false;
+        if (!q) return true;
+        return (p.project_id && p.project_id.toLowerCase().includes(q)) ||
+               (p.project_name && p.project_name.toLowerCase().includes(q)) ||
+               (p.account_name && p.account_name.toLowerCase().includes(q)) ||
+               (p.nal_name && p.nal_name.toLowerCase().includes(q)) ||
+               (p.billing_account_id && p.billing_account_id.toLowerCase().includes(q));
+      });
+
+      var countPill = document.getElementById('projTableCountPill');
+      if (countPill) countPill.textContent = filtered.length + ' Projects';
+
+      tbody.innerHTML = '';
+      filtered.forEach(p => {
+        var gcpYtd = isRvp ? p.total_gcp_rvp_rev : p.total_gcp_gross_rev;
+        var aiYtd = isRvp ? p.total_cloud_ai_rvp_rev : p.total_cloud_ai_gross_rev;
+        var dadbaiYtd = p.total_dadbai_rvp_rev || 0;
+        var aiPct = p.cloud_ai_rvp_penetration_pct || 0;
+        var momVal = p.drr_mom_growth_pct || 0;
+        var tr = document.createElement('tr');
+        tr.setAttribute('data-proj-id', p.project_id);
+        if (activePid && p.project_id.toLowerCase() === activePid.toLowerCase()) {
+          tr.className = 'active-row';
+        }
+        tr.innerHTML = `
+          <td class="clickable-col" onclick="loadProjectCurveWorkbench('${p.project_id}', true)" title="点击在上方工作台绘制 ${p.project_id} 的 2026 月度 MRR 与每日 DRR 双曲线">
+            <span class="trend-link-wrap">
+              <span class="trend-badge">📈 双曲线</span>
+              <span style="font-family:'Roboto Mono',monospace; font-weight:600;">${escapeHtml(p.project_id)}</span>
+            </span>
+          </td>
+          <td style="font-size:12px; color:var(--text-secondary);">${escapeHtml(p.project_name || '-')}${p.project_number ? ' <span style="font-size:11px; color:#94a3b8;">(#' + escapeHtml(p.project_number) + ')</span>' : ''}</td>
+          <td><strong>${escapeHtml(p.account_name || '-')}</strong></td>
+          <td><span class="pill pill-blue">${escapeHtml(p.nal_name || '-')}</span></td>
+          <td class="text-num"><strong>${fmtUSD(gcpYtd)}</strong></td>
+          <td class="text-num" style="color:var(--google-purple);font-weight:700;">${fmtUSD(dadbaiYtd)}</td>
+          <td class="text-num" style="color:var(--google-purple);">${fmtUSD(aiYtd)}</td>
+          <td class="text-num"><span class="pill ${aiPct > 30 ? 'pill-purple' : 'pill-blue'}">${aiPct.toFixed(1)}%</span></td>
+          <td class="text-num">${fmtUSD(p.latest_gcp_rvp_drr)}</td>
+          <td class="text-num">${fmtUSD(p.latest_7d_avg_gcp_rvp_drr)}</td>
+          <td class="text-num" style="font-weight:600;">${fmtUSD(p.current_month_gcp_rvp_mrr)}</td>
+          <td class="text-num" style="color:var(--text-secondary);">${fmtUSD(p.prior_month_gcp_rvp_mrr)}</td>
+          <td class="text-num"><span class="pill ${momVal >= 0 ? 'pill-green' : 'pill-orange'}">${momVal >= 0 ? '+' : ''}${momVal.toFixed(1)}%</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
     }
 
     function populateProjectWorkbenchFilters() {
@@ -3078,6 +3192,7 @@
     function onProjCustomerFilterChange() {
       var cust = document.getElementById('projCustomerFilter').value;
       populateProjectDropdown(cust);
+      renderTopProjectsTable();
       var sel = document.getElementById('projSelectDropdown');
       if (sel && sel.value) {
         loadProjectCurveWorkbench(sel.value);
@@ -3088,10 +3203,10 @@
       var inp = document.getElementById('projCustomInput');
       var q = (inp && inp.value || '').trim();
       if (!q) return;
-      loadProjectCurveWorkbench(q);
+      loadProjectCurveWorkbench(q, true);
     }
 
-    async function loadProjectCurveWorkbench(projectId) {
+    async function loadProjectCurveWorkbench(projectId, scrollToWorkbench) {
       var pid = (projectId || '').trim();
       if (!pid) return;
       var key = pid.toLowerCase();
@@ -3120,6 +3235,19 @@
               break;
             }
           }
+        }
+        // Highlight active row in topProjectsTableBody
+        var rows = document.querySelectorAll('#topProjectsTableBody tr');
+        var targetId = (payload.project && payload.project.project_id || '').toLowerCase();
+        rows.forEach(tr => {
+          if ((tr.getAttribute('data-proj-id') || '').toLowerCase() === targetId) {
+            tr.classList.add('active-row');
+          } else {
+            tr.classList.remove('active-row');
+          }
+        });
+        if (scrollToWorkbench) {
+          flashChartCard('projectCurveWorkbench');
         }
         renderCurrentProjectCharts();
       } catch (e) {
@@ -3574,7 +3702,40 @@
               `;
             }
 
+            var rowsTableHtml = '';
+            if (sq.rows && sq.rows.length > 0) {
+              var colsList = (sq.columns && sq.columns.length) ? sq.columns : Object.keys(sq.rows[0]);
+              var ths = colsList.map(c => `<th>${escapeHtml(c)}</th>`).join('');
+              var trs = sq.rows.slice(0, 60).map(r => {
+                var tds = colsList.map(c => {
+                  var v = r[c];
+                  var sVal = (v === null || v === undefined) ? '-' : String(v);
+                  var isNumCol = /^(signed_|net_|comp_|raw_|total_|latest_|current_|prior_|gcp_|cloud_ai_|da_|db_|ge_|seats|orders|deal_lines|ytd_)/i.test(c) && !isNaN(Number(v)) && v !== '';
+                  var disp = isNumCol
+                    ? ((/seats|qty|lines|count|days|months/i.test(c)) ? Number(v).toLocaleString() : fmtUSD2(Number(v)))
+                    : escapeHtml(sVal);
+                  return `<td class="${isNumCol ? 'text-num' : ''}">${disp}</td>`;
+                }).join('');
+                return `<tr>${tds}</tr>`;
+              }).join('');
+              rowsTableHtml = `
+                <div style="margin:10px 0; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden; background:#ffffff;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 12px; background:#f8fafc; border-bottom:1px solid #e2e8f0; font-size:12px; font-weight:600; color:#1e293b;">
+                    <span>📋 SQL 查询结果明细表 (共 ${sq.row_count || sq.rows.length} 行)</span>
+                    <button class="btn-action" style="padding:2px 8px; font-size:11px;" onclick="exportSqlResultCsv(${storeIdx})">📥 导出 CSV</button>
+                  </div>
+                  <div class="table-container" style="max-height:320px; overflow-y:auto;">
+                    <table>
+                      <thead><tr>${ths}</tr></thead>
+                      <tbody>${trs}</tbody>
+                    </table>
+                  </div>
+                </div>
+              `;
+            }
+
             sqlHtml += `
+              ${rowsTableHtml}
               <details class="sql-details">
                 <summary>
                   <span>🗄️ BQCA 生成并执行的 BigQuery SQL #${idx + 1}: ${escapeHtml(sq.explanation)} (返回 ${sq.row_count || 0} 行)${jobBadge}</span>
